@@ -220,6 +220,31 @@ docker compose build r-engine 2>&1 | Tee-Object -FilePath build.log
 Vão passar centenas de linhas de texto na tela. Isso é normal — é o R
 instalando pacote por pacote. Deixe rodando e vá fazer outra coisa.
 
+### Um bloco vermelho no início: pode ignorar
+
+Logo nas primeiras linhas vai aparecer algo assim, em vermelho:
+
+```
+docker :  Image psychgen-r-engine Building
+No linha:1 caractere:1
+    + CategoryInfo          : NotSpecified: ( Image psychgen-r-engine Building :String)
+    + FullyQualifiedErrorId : NativeCommandError
+```
+
+**Não é erro.** É uma implicância do PowerShell.
+
+O Docker escreve as mensagens de progresso no canal de erros do sistema
+(*stderr*) mesmo quando não são erros — é só onde ele decidiu escrever. O
+trecho `2>&1` do comando junta esse canal com o normal para que tudo caia no
+`build.log`. Ao ver algo chegando por ali, o PowerShell pinta de vermelho e
+monta esse bloco de "NativeCommandError", mesmo o conteúdo sendo inofensivo.
+
+Repare no que está escrito dentro dele: *"Image psychgen-r-engine Building"* —
+o Docker avisando que começou a construir.
+
+Só aparece uma vez. Se logo abaixo você vir `#1`, `#2`, `#3` avançando, está
+tudo certo. O erro de verdade, se vier, aparece **no fim** e para o comando.
+
 ### Como saber se deu certo
 
 No fim, você deve ver algo como:
@@ -318,9 +343,16 @@ Sempre a partir de `cd $HOME\Documents\psychgen`:
 | Ver se está tudo de pé | `docker compose ps` |
 | Ver o que o R está fazendo | `docker compose logs -f r-engine` |
 | Pegar as atualizações que eu fizer | `git pull` |
+| Recuperar espaço em disco (só imagens órfãs) | `docker image prune` |
 | Reconstruir após um `git pull` | `docker compose up -d --build` |
 
 Para sair de um log que fica rolando na tela: **Ctrl+C**.
+
+> Sobre `docker image prune`: cada reconstrução deixa para trás a imagem
+> anterior, sem nome, ocupando disco. Esse comando remove **apenas** essas
+> órfãs — não toca no que está em uso nem em outros projetos. Evite a variante
+> `docker image prune -a`, que é bem mais agressiva e apagaria imagens dos
+> seus outros projetos também.
 
 ---
 
