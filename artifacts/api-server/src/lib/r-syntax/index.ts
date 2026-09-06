@@ -87,10 +87,16 @@ source(file.path(getwd(), "r-scripts", "_common.R"))
 
 const MERGE_AND_SOURCE = (stageScript: string, overrides: string) => `
 # --- Merge form params into the runtime payload supplied by the API ---------
-inp <- if (Sys.getenv("R_INPUT_JSON") != "" && file.exists(Sys.getenv("R_INPUT_JSON")))
-         jsonlite::fromJSON(Sys.getenv("R_INPUT_JSON"), simplifyVector = FALSE)
-       else
-         list()
+# As chaves em \`} else {\` são obrigatórias: no nível superior de um script,
+# o R encerra a expressão no fim do primeiro ramo do \`if\` e trata um \`else\`
+# em linha própria como erro de sintaxe ("unexpected 'else'"). Dentro de uma
+# função funcionaria; aqui, não.
+.runtime_json <- Sys.getenv("R_INPUT_JSON")
+inp <- if (nzchar(.runtime_json) && file.exists(.runtime_json)) {
+  jsonlite::fromJSON(.runtime_json, simplifyVector = FALSE)
+} else {
+  list()
+}
 ${overrides}
 .merged_path <- tempfile(fileext = ".json")
 writeLines(jsonlite::toJSON(inp, auto_unbox = TRUE, null = "null"), .merged_path)
