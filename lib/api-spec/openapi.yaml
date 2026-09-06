@@ -613,14 +613,52 @@ components:
         targetAudience: { type: string }
         publisher:
           type: ["string", "null"]
-        status:
+    ItemTypeSpec:
+      type: object
+      description: >-
+        Um tipo de item (dimensão) do instrumento e os atributos que ele deve
+        cobrir. O AI-GENIE gera itens por ATRIBUTO, não por construto solto:
+        é a atribuição por atributo que serve de gabarito para o NMI, que é
+        calculado nesse nível mais fino.
+      required: [type, attributes]
+      properties:
+        type:
           type: string
-          enum: [draft, generating, calibrating, ready, archived]
+          minLength: 1
+          description: Nome da dimensão (ex.- "neuroticismo").
+        attributes:
+          type: array
+          minItems: 2
+          items: { type: string }
+          description: >-
+            Pelo menos 2 atributos únicos (ex.- ansioso, inseguro, irritável).
+            O pacote rejeita tipos com menos de 2.
+        definition:
+          type: ["string", "null"]
+          description: >-
+            Definição do construto passada ao LLM (item.type.definitions).
+            Importante para construtos emergentes ou ambíguos.
+
+    ItemExample:
+      type: object
+      description: >-
+        Item-exemplo usado como âncora de estilo (item.examples). É por aqui
+        que entram os itens de uma forma existente quando o objetivo é gerar
+        uma forma paralela.
+      required: [statement, attribute, type]
+      properties:
+        statement: { type: string, minLength: 1 }
+        attribute: { type: string, minLength: 1 }
+        type: { type: string, minLength: 1 }
 
     AigenieParams:
       type: object
-      description: Full AIGENIE parameter surface — every knob exposed to the user
+      description: >-
+        Parâmetros do AI-GENIE (Russell-Lasalandra, Christensen & Golino, 2026,
+        Behavior Research Methods 58:217). Mapeiam nos argumentos de
+        AIGENIE::AIGENIE() e AIGENIE::GENIE().
       required:
+        - mode
         - model
         - temperature
         - topP
@@ -629,30 +667,87 @@ components:
         - allTogether
         - runOverall
         - embeddingModel
+        - egaModel
+        - egaAlgorithm
+        - itemTypes
       properties:
+        mode:
+          type: string
+          enum: [generate, validate]
+          default: generate
+          description: >-
+            generate = AIGENIE() gera itens novos e reduz o pool.
+            validate = GENIE() apenas valida e reduz os itens que já existem no
+            projeto, sem gerar nada (revalidação de instrumento).
         model: { type: string, default: "gpt-4o" }
-        temperature: { type: number, minimum: 0, maximum: 2, default: 0.9 }
+        temperature: { type: number, minimum: 0, maximum: 2, default: 1.0 }
         topP: { type: number, minimum: 0, maximum: 1, default: 1.0 }
-        targetN: { type: integer, minimum: 5, maximum: 200, default: 30 }
-        adaptive: { type: boolean, default: true }
-        allTogether: { type: boolean, default: false }
-        runOverall: { type: boolean, default: true }
-        systemRole:
-          type: ["string", "null"]
-          description: Custom system role for the LLM
-        promptNotes:
-          type: ["string", "null"]
-          description: Extra notes appended to prompt
-        itemAttributes:
+        targetN:
+          type: integer
+          minimum: 10
+          maximum: 300
+          default: 60
+          description: >-
+            Itens gerados por tipo antes da redução. O artigo recomenda 60 ou
+            mais; abaixo disso UVA e bootEGA têm pouco o que reduzir e a
+            estabilidade fica ruidosa.
+        adaptive:
+          type: boolean
+          default: true
+          description: Injeta os itens já gerados no prompt seguinte para evitar repetição.
+        allTogether:
+          type: boolean
+          default: false
+          description: Roda a redução com todos os tipos juntos, em vez de tipo a tipo.
+        runOverall:
+          type: boolean
+          default: true
+          description: Roda uma análise de ajuste no pool completo após a redução.
+        embeddingModel: { type: string, default: "text-embedding-3-small" }
+        egaModel:
+          type: string
+          enum: [TMFG, glasso]
+          default: TMFG
+          description: >-
+            Método de construção da rede. O artigo reporta TMFG levemente
+            melhor que EBICglasso para dados de texto.
+        egaAlgorithm:
+          type: string
+          enum: [walktrap, louvain, leiden]
+          default: walktrap
+          description: Algoritmo de detecção de comunidades. O artigo usa Walktrap.
+        itemTypes:
           type: array
-          items: { type: string }
-          description: Constraints/attributes each item must satisfy
+          minItems: 1
+          items: { $ref: "#/components/schemas/ItemTypeSpec" }
         itemExamples:
           type: array
+          items: { $ref: "#/components/schemas/ItemExample" }
+        domain:
+          type: ["string", "null"]
+          description: Domínio de pesquisa (ex.- "psicologia da personalidade").
+        scaleTitle:
+          type: ["string", "null"]
+          description: Título da escala em construção.
+        audience:
+          type: ["string", "null"]
+          description: >-
+            População-alvo, o mais específica possível (ex.- "adolescentes
+            brasileiros de escola pública").
+        responseOptions:
+          type: array
           items: { type: string }
-          description: Few-shot example items
-        embeddingModel: { type: string, default: "text-embedding-3-large" }
-        egaThreshold: { type: number, minimum: 0, maximum: 1, default: 0.7 }
+          description: >-
+            Rótulos da escala de resposta (ex.- concordo / neutro / discordo).
+            Dão contexto ao LLM; não aparecem no texto do item.
+        systemRole:
+          type: ["string", "null"]
+          description: Papel de sistema customizado. Se ausente, é construído a partir de domain/audience.
+        promptNotes:
+          type: ["string", "null"]
+          description: >-
+            Instruções extras anexadas ao fim do prompt (ex.- "todos os itens
+            devem começar com 'Eu sou alguém que...'").
 
     AigenieRunInput:
       type: object

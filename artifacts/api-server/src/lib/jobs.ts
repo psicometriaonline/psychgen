@@ -163,36 +163,121 @@ async function runJob(
       });
       if (!project) throw new Error("Project not found");
 
+      // No modo `validate` o GENIE() não gera nada: ele reduz um pool que já
+      // existe, então os itens do projeto precisam ir junto no payload.
+      const mode = (params.mode as string) ?? "generate";
+      let existingItems: { statement: string; attribute?: string; type?: string }[] = [];
+      if (mode === "validate") {
+        const rows = await db.query.itemsTable.findMany({
+          where: eq(itemsTable.projectId, projectId),
+        });
+        if (rows.length === 0) {
+          throw new Error(
+            "Modo 'validate' exige itens já cadastrados no projeto — não há nenhum.",
+          );
+        }
+        existingItems = rows.map((it) => ({
+          statement: it.text,
+          attribute: it.attribute ?? undefined,
+          type: it.dimension ?? undefined,
+        }));
+      }
+
       const r = await runScript<{
-        items: { text: string; community: number | null }[];
+        items: {
+          text: string;
+          community: number | null;
+          attribute: string | null;
+          type: string | null;
+        }[];
         rounds: number;
         rejected: number;
         egaSummary: { dimensions: number | null; method: string; n_items: number };
         model: string;
-      }>(scriptR, { construct: project.construct, params }, { onEvent, jobId });
+        aigenie: {
+          mode: string;
+          packageVersion: string;
+          embeddingModel: string;
+          egaModel: string;
+          egaAlgorithm: string;
+          targetN: number;
+          startN: number;
+          finalN: number;
+          meanInitialNMI: number | null;
+          meanFinalNMI: number | null;
+        };
+        perType: {
+          type: string;
+          startN: number | null;
+          finalN: number | null;
+          initialNMI: number | null;
+          finalNMI: number | null;
+          egaModel: string;
+          uvaRemoved: number | null;
+          uvaSweeps: number | null;
+          bootEgaRemoved: number | null;
+          meanItemStability: number | null;
+        }[];
+      }>(
+        scriptR,
+        {
+          construct: project.construct,
+          params: mode === "validate" ? { ...params, items: existingItems } : params,
+        },
+        { onEvent, jobId },
+      );
       if (!r.ok) throw new Error(r.error);
       checkCancel();
 
-      if (r.result.items.length > 0) {
+      // Em `validate` o pool de saída é um subconjunto do que já está no banco;
+      // inserir de novo duplicaria tudo. Os itens sobreviventes são marcados e
+      // os demais ficam como estão, para o operador decidir na curadoria.
+      if (mode === "validate") {
+        const kept = new Set(r.result.items.map((it) => it.text));
+        const rows = await db.query.itemsTable.findMany({
+          where: eq(itemsTable.projectId, projectId),
+        });
+        for (const row of rows) {
+          const survived = kept.has(row.text);
+          const match = r.result.items.find((it) => it.text === row.text);
+          await db
+            .update(itemsTable)
+            .set({
+              status: survived ? "needs_review" : "rejected",
+              egaCommunity: match?.community ?? row.egaCommunity,
+              attribute: match?.attribute ?? row.attribute,
+              dimension: match?.type ?? row.dimension,
+            })
+            .where(eq(itemsTable.id, row.id));
+        }
+      } else if (r.result.items.length > 0) {
         await db.insert(itemsTable).values(
           r.result.items.map((it) => ({
             projectId,
             text: it.text,
             construct: project.construct,
+            dimension: it.type,
+            attribute: it.attribute,
             status: "needs_review",
             generatedBy: r.result.model,
             egaCommunity: it.community,
           })),
         );
       }
+      // O relatório é o produto: é ele que carrega a evidência de validade
+      // estrutural (NMI antes/depois, redundâncias removidas por UVA, itens
+      // instáveis removidos por bootEGA) que a editora vai receber.
+      const fmtNMI = (v: number | null) => (v == null ? "n/a" : v.toFixed(1));
       await db.insert(reportsTable).values({
         projectId,
         kind: "aigenie",
-        summary: `${r.result.items.length} itens gerados em ${r.result.rounds} rodadas (${r.result.rejected} rejeitados; EGA: ${r.result.egaSummary.dimensions ?? "n/a"} dimensões via ${r.result.egaSummary.method}).`,
+        summary:
+          `${r.result.aigenie.startN} itens → ${r.result.aigenie.finalN} após UVA + bootEGA ` +
+          `(${r.result.egaSummary.dimensions ?? "n/a"} dimensões, ${r.result.aigenie.egaModel}). ` +
+          `NMI ${fmtNMI(r.result.aigenie.meanInitialNMI)} → ${fmtNMI(r.result.aigenie.meanFinalNMI)}.`,
         metricsJson: {
-          generated: r.result.items.length,
-          rounds: r.result.rounds,
-          rejected: r.result.rejected,
+          aigenie: r.result.aigenie,
+          perType: r.result.perType,
           ega: r.result.egaSummary,
           model: r.result.model,
           params,
@@ -203,6 +288,8 @@ async function runJob(
         rounds: r.result.rounds,
         rejected: r.result.rejected,
         egaSummary: r.result.egaSummary,
+        aigenie: r.result.aigenie,
+        perType: r.result.perType,
       });
       await setProjectStatus(projectId, "draft");
     } else if (stage === "difficulty") {

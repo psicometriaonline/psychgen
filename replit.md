@@ -33,13 +33,17 @@ Production-oriented system for AI-driven psychometric instrument development for
 ### Architecture
 
 - **Frontend** (`artifacts/psychgen-br`, base path `/`): React + Vite + shadcn/ui + react-query + Recharts + wouter, fully in pt-BR.
-  - Pages: Dashboard (Painel), Projects, ProjectDetail (com botão **Exportar Excel** + grade de 4 estágios), ProjectNew, ItemDetail, RunAigenie, RunDifficulty, RunIrt, **RunSampleDesign** (Estágio 5: estratos + tamanhos), Jobs, JobDetail (com `JobLogs` SSE), Reports, ReportDetail (renderiza **WrightMap** quando `kind === "irt"`).
+  - Pages: Dashboard (Painel), Projects, ProjectDetail (com botão **Exportar Excel** + grade de 4 estágios), ProjectNew, ItemDetail, **RunAigenie** (reescrita para o contrato real: seletor de modo generate/validate, dimensões com atributos — mínimo 2 por dimensão —, definições conceituais, itens-âncora com statement/attribute/type, EGA model/algoritmo, e avisos quando `targetN < 60` ou uma dimensão tem menos de 2 atributos), RunDifficulty, RunIrt, **RunSampleDesign** (Estágio 5: estratos + tamanhos), Jobs, JobDetail (com `JobLogs` SSE), Reports, ReportDetail (renderiza **WrightMap** quando `kind === "irt"`).
   - Componentes: `wright-map.tsx` (visualização SVG/CSS de pessoas vs itens em escala θ), `job-logs.tsx` (logs ao vivo via EventSource SSE).
 - **API server** (`artifacts/api-server`, port 8080): Express 5 + Drizzle/Postgres. Pipeline 100% em R via subprocessos.
   - Rotas: `/api/healthz` (com `?deep=1` checando R), `/api/projects`, `/api/items`, `/api/pipeline/jobs[/:id[/logs|/cancel]]`, `/api/projects/:id/runs/{aigenie,difficulty,irt,sample-design}`, `/api/projects/:id/export.xlsx`, `/api/dashboard/*`, `/api/reports`.
   - Lib: `jobs.ts` (runner async em memória + cancelamento + pub/sub para SSE), `r-runner.ts` (executa Rscript com input JSON, captura stdout/stderr/progresso).
   - Scripts R: `_common.R` (helpers chat_complete/embeddings/cosine_sim/log/progress), `healthcheck.R`, `stage1_aigenie.R` (LLM + embeddings + EGA com fallback igraph::louvain), `stage2_difficulty.R` (glmnet + randomForest), `stage3_irt.R` (mirt 1PL/2PL/3PL/Rasch + Wright Map data), `stage5_sample_design.R` (alocação por estratos com pesos), `export_xlsx.R` (workbook multi-aba: Itens, IRT, Wright Map, Estratos, Relatórios).
-- **Database** (`lib/db`): `projects`, `items`, `pipeline_jobs`, `reports` (com `kind` aceitando `"sample_design"`), Drizzle migrations.
+- **Database** (`lib/db`): `projects`, `items` (com `dimension` = *item type* do AI-GENIE e `attribute` = faceta dentro do tipo; o NMI é calculado no nível do atributo), `pipeline_jobs`, `reports` (com `kind` aceitando `"sample_design"`). Schema aplicado por `drizzle-kit push` no boot — não há arquivos de migração versionados.
+
+### Contrato de parâmetros do estágio 1
+
+`AigenieParams` no `openapi.yaml` mapeia nos argumentos de `AIGENIE::AIGENIE()`. Mudanças em relação à versão anterior: `itemAttributes: string[]` virou `itemTypes: ItemTypeSpec[]` (lista nomeada por dimensão — o formato plano não expressa multi-dimensão); `itemExamples: string[]` virou `ItemExample[]` com `statement`/`attribute`/`type`; `egaThreshold` foi removido (não existe no AI-GENIE — era do hack de cosseno) e deu lugar a `egaModel` (TMFG/glasso) e `egaAlgorithm` (walktrap/louvain/leiden); entraram `mode`, `domain`, `scaleTitle`, `audience`, `responseOptions` e `itemTypes[].definition`; `targetN` subiu de 30 para 60. O `stage1_aigenie.R` ainda aceita o formato antigo, então payloads legados não quebram.
 - **Shared types**: `lib/api-spec` (OpenAPI), `lib/api-zod` (Zod gerado), `lib/api-client-react` (react-query hooks gerados).
 
 ### R packages installed under `~/.R/library-4.4`

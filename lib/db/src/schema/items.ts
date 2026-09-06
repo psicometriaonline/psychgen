@@ -18,7 +18,12 @@ export const itemsTable = pgTable("items", {
     .references(() => projectsTable.id, { onDelete: "cascade" }),
   text: text("text").notNull(),
   construct: varchar("construct", { length: 255 }),
+  // `dimension` = o "item type" do AI-GENIE; `attribute` = a faceta dentro do
+  // tipo (ex.: dimension "neuroticismo", attribute "ansioso"). O NMI do
+  // AI-GENIE é calculado no nível do atributo, então guardar os dois é o que
+  // permite reproduzir a métrica e montar o relatório para a editora.
   dimension: varchar("dimension", { length: 255 }),
+  attribute: varchar("attribute", { length: 255 }),
   status: varchar("status", { length: 32 }).notNull().default("generated"),
   generatedBy: varchar("generated_by", { length: 64 }).notNull(),
   difficultyPredicted: doublePrecision("difficulty_predicted"),

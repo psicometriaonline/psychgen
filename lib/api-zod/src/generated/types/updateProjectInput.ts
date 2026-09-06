@@ -5,7 +5,6 @@
  * PsychGen BR — AI-driven psychometric instrument development
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateProjectInputStatus } from "./updateProjectInputStatus";
 
 export interface UpdateProjectInput {
   /** @minLength 1 */
@@ -18,5 +17,4 @@ export interface UpdateProjectInput {
   targetAudience?: string;
   /** @nullable */
   publisher?: string | null;
-  status?: UpdateProjectInputStatus;
 }

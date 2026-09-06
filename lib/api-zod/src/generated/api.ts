@@ -167,9 +167,6 @@ export const UpdateProjectBody = zod.object({
   language: zod.string().optional(),
   targetAudience: zod.string().optional(),
   publisher: zod.string().nullish(),
-  status: zod
-    .enum(["draft", "generating", "calibrating", "ready", "archived"])
-    .optional(),
 });
 
 export const UpdateProjectResponse = zod.object({
@@ -364,8 +361,9 @@ export const RunAigenieStageParams = zod.object({
   id: zod.coerce.number().min(1),
 });
 
+export const runAigenieStageBodyParamsModeDefault = `generate`;
 export const runAigenieStageBodyParamsModelDefault = `gpt-4o`;
-export const runAigenieStageBodyParamsTemperatureDefault = 0.9;
+export const runAigenieStageBodyParamsTemperatureDefault = 1;
 export const runAigenieStageBodyParamsTemperatureMin = 0;
 export const runAigenieStageBodyParamsTemperatureMax = 2;
 
@@ -373,21 +371,27 @@ export const runAigenieStageBodyParamsTopPDefault = 1;
 export const runAigenieStageBodyParamsTopPMin = 0;
 export const runAigenieStageBodyParamsTopPMax = 1;
 
-export const runAigenieStageBodyParamsTargetNDefault = 30;
-export const runAigenieStageBodyParamsTargetNMin = 5;
-export const runAigenieStageBodyParamsTargetNMax = 200;
+export const runAigenieStageBodyParamsTargetNDefault = 60;
+export const runAigenieStageBodyParamsTargetNMin = 10;
+export const runAigenieStageBodyParamsTargetNMax = 300;
 
 export const runAigenieStageBodyParamsAdaptiveDefault = true;
 export const runAigenieStageBodyParamsAllTogetherDefault = false;
 export const runAigenieStageBodyParamsRunOverallDefault = true;
-export const runAigenieStageBodyParamsEmbeddingModelDefault = `text-embedding-3-large`;
-export const runAigenieStageBodyParamsEgaThresholdDefault = 0.7;
-export const runAigenieStageBodyParamsEgaThresholdMin = 0;
-export const runAigenieStageBodyParamsEgaThresholdMax = 1;
+export const runAigenieStageBodyParamsEmbeddingModelDefault = `text-embedding-3-small`;
+export const runAigenieStageBodyParamsEgaModelDefault = `TMFG`;
+export const runAigenieStageBodyParamsEgaAlgorithmDefault = `walktrap`;
+export const runAigenieStageBodyParamsItemTypesItemAttributesMin = 2;
 
 export const RunAigenieStageBody = zod.object({
   params: zod
     .object({
+      mode: zod
+        .enum(["generate", "validate"])
+        .default(runAigenieStageBodyParamsModeDefault)
+        .describe(
+          "generate = AIGENIE() gera itens novos e reduz o pool. validate = GENIE() apenas valida e reduz os itens que já existem no projeto, sem gerar nada (revalidação de instrumento).",
+        ),
       model: zod.string().default(runAigenieStageBodyParamsModelDefault),
       temperature: zod
         .number()
@@ -403,41 +407,119 @@ export const RunAigenieStageBody = zod.object({
         .number()
         .min(runAigenieStageBodyParamsTargetNMin)
         .max(runAigenieStageBodyParamsTargetNMax)
-        .default(runAigenieStageBodyParamsTargetNDefault),
-      adaptive: zod.boolean().default(runAigenieStageBodyParamsAdaptiveDefault),
+        .default(runAigenieStageBodyParamsTargetNDefault)
+        .describe(
+          "Itens gerados por tipo antes da redução. O artigo recomenda 60 ou mais; abaixo disso UVA e bootEGA têm pouco o que reduzir e a estabilidade fica ruidosa.",
+        ),
+      adaptive: zod
+        .boolean()
+        .default(runAigenieStageBodyParamsAdaptiveDefault)
+        .describe(
+          "Injeta os itens já gerados no prompt seguinte para evitar repetição.",
+        ),
       allTogether: zod
         .boolean()
-        .default(runAigenieStageBodyParamsAllTogetherDefault),
+        .default(runAigenieStageBodyParamsAllTogetherDefault)
+        .describe(
+          "Roda a redução com todos os tipos juntos, em vez de tipo a tipo.",
+        ),
       runOverall: zod
         .boolean()
-        .default(runAigenieStageBodyParamsRunOverallDefault),
-      systemRole: zod
-        .string()
-        .nullish()
-        .describe("Custom system role for the LLM"),
-      promptNotes: zod
-        .string()
-        .nullish()
-        .describe("Extra notes appended to prompt"),
-      itemAttributes: zod
-        .array(zod.string())
-        .optional()
-        .describe("Constraints\/attributes each item must satisfy"),
-      itemExamples: zod
-        .array(zod.string())
-        .optional()
-        .describe("Few-shot example items"),
+        .default(runAigenieStageBodyParamsRunOverallDefault)
+        .describe(
+          "Roda uma análise de ajuste no pool completo após a redução.",
+        ),
       embeddingModel: zod
         .string()
         .default(runAigenieStageBodyParamsEmbeddingModelDefault),
-      egaThreshold: zod
-        .number()
-        .min(runAigenieStageBodyParamsEgaThresholdMin)
-        .max(runAigenieStageBodyParamsEgaThresholdMax)
-        .default(runAigenieStageBodyParamsEgaThresholdDefault),
+      egaModel: zod
+        .enum(["TMFG", "glasso"])
+        .default(runAigenieStageBodyParamsEgaModelDefault)
+        .describe(
+          "Método de construção da rede. O artigo reporta TMFG levemente melhor que EBICglasso para dados de texto.",
+        ),
+      egaAlgorithm: zod
+        .enum(["walktrap", "louvain", "leiden"])
+        .default(runAigenieStageBodyParamsEgaAlgorithmDefault)
+        .describe(
+          "Algoritmo de detecção de comunidades. O artigo usa Walktrap.",
+        ),
+      itemTypes: zod
+        .array(
+          zod
+            .object({
+              type: zod
+                .string()
+                .min(1)
+                .describe('Nome da dimensão (ex.- \"neuroticismo\").'),
+              attributes: zod
+                .array(zod.string())
+                .min(runAigenieStageBodyParamsItemTypesItemAttributesMin)
+                .describe(
+                  "Pelo menos 2 atributos únicos (ex.- ansioso, inseguro, irritável). O pacote rejeita tipos com menos de 2.",
+                ),
+              definition: zod
+                .string()
+                .nullish()
+                .describe(
+                  "Definição do construto passada ao LLM (item.type.definitions). Importante para construtos emergentes ou ambíguos.",
+                ),
+            })
+            .describe(
+              "Um tipo de item (dimensão) do instrumento e os atributos que ele deve cobrir. O AI-GENIE gera itens por ATRIBUTO, não por construto solto: é a atribuição por atributo que serve de gabarito para o NMI, que é calculado nesse nível mais fino.",
+            ),
+        )
+        .min(1),
+      itemExamples: zod
+        .array(
+          zod
+            .object({
+              statement: zod.string().min(1),
+              attribute: zod.string().min(1),
+              type: zod.string().min(1),
+            })
+            .describe(
+              "Item-exemplo usado como âncora de estilo (item.examples). É por aqui que entram os itens de uma forma existente quando o objetivo é gerar uma forma paralela.",
+            ),
+        )
+        .optional(),
+      domain: zod
+        .string()
+        .nullish()
+        .describe(
+          'Domínio de pesquisa (ex.- \"psicologia da personalidade\").',
+        ),
+      scaleTitle: zod
+        .string()
+        .nullish()
+        .describe("Título da escala em construção."),
+      audience: zod
+        .string()
+        .nullish()
+        .describe(
+          'População-alvo, o mais específica possível (ex.- \"adolescentes brasileiros de escola pública\").',
+        ),
+      responseOptions: zod
+        .array(zod.string())
+        .optional()
+        .describe(
+          "Rótulos da escala de resposta (ex.- concordo \/ neutro \/ discordo). Dão contexto ao LLM; não aparecem no texto do item.",
+        ),
+      systemRole: zod
+        .string()
+        .nullish()
+        .describe(
+          "Papel de sistema customizado. Se ausente, é construído a partir de domain\/audience.",
+        ),
+      promptNotes: zod
+        .string()
+        .nullish()
+        .describe(
+          "Instruções extras anexadas ao fim do prompt (ex.- \"todos os itens devem começar com 'Eu sou alguém que...'\").",
+        ),
     })
     .describe(
-      "Full AIGENIE parameter surface — every knob exposed to the user",
+      "Parâmetros do AI-GENIE (Russell-Lasalandra, Christensen & Golino, 2026, Behavior Research Methods 58:217). Mapeiam nos argumentos de AIGENIE::AIGENIE() e AIGENIE::GENIE().",
     ),
 });
 

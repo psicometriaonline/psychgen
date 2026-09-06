@@ -5,11 +5,18 @@
  * PsychGen BR — AI-driven psychometric instrument development
  * OpenAPI spec version: 0.1.0
  */
+import type { AigenieParamsEgaAlgorithm } from "./aigenieParamsEgaAlgorithm";
+import type { AigenieParamsEgaModel } from "./aigenieParamsEgaModel";
+import type { AigenieParamsMode } from "./aigenieParamsMode";
+import type { ItemExample } from "./itemExample";
+import type { ItemTypeSpec } from "./itemTypeSpec";
 
 /**
- * Full AIGENIE parameter surface — every knob exposed to the user
+ * Parâmetros do AI-GENIE (Russell-Lasalandra, Christensen & Golino, 2026, Behavior Research Methods 58:217). Mapeiam nos argumentos de AIGENIE::AIGENIE() e AIGENIE::GENIE().
  */
 export interface AigenieParams {
+  /** generate = AIGENIE() gera itens novos e reduz o pool. validate = GENIE() apenas valida e reduz os itens que já existem no projeto, sem gerar nada (revalidação de instrumento). */
+  mode: AigenieParamsMode;
   model: string;
   /**
    * @minimum 0
@@ -22,31 +29,50 @@ export interface AigenieParams {
    */
   topP: number;
   /**
-   * @minimum 5
-   * @maximum 200
+   * Itens gerados por tipo antes da redução. O artigo recomenda 60 ou mais; abaixo disso UVA e bootEGA têm pouco o que reduzir e a estabilidade fica ruidosa.
+   * @minimum 10
+   * @maximum 300
    */
   targetN: number;
+  /** Injeta os itens já gerados no prompt seguinte para evitar repetição. */
   adaptive: boolean;
+  /** Roda a redução com todos os tipos juntos, em vez de tipo a tipo. */
   allTogether: boolean;
+  /** Roda uma análise de ajuste no pool completo após a redução. */
   runOverall: boolean;
+  embeddingModel: string;
+  /** Método de construção da rede. O artigo reporta TMFG levemente melhor que EBICglasso para dados de texto. */
+  egaModel: AigenieParamsEgaModel;
+  /** Algoritmo de detecção de comunidades. O artigo usa Walktrap. */
+  egaAlgorithm: AigenieParamsEgaAlgorithm;
+  /** @minItems 1 */
+  itemTypes: ItemTypeSpec[];
+  itemExamples?: ItemExample[];
   /**
-   * Custom system role for the LLM
+   * Domínio de pesquisa (ex.- "psicologia da personalidade").
+   * @nullable
+   */
+  domain?: string | null;
+  /**
+   * Título da escala em construção.
+   * @nullable
+   */
+  scaleTitle?: string | null;
+  /**
+   * População-alvo, o mais específica possível (ex.- "adolescentes brasileiros de escola pública").
+   * @nullable
+   */
+  audience?: string | null;
+  /** Rótulos da escala de resposta (ex.- concordo / neutro / discordo). Dão contexto ao LLM; não aparecem no texto do item. */
+  responseOptions?: string[];
+  /**
+   * Papel de sistema customizado. Se ausente, é construído a partir de domain/audience.
    * @nullable
    */
   systemRole?: string | null;
   /**
-   * Extra notes appended to prompt
+   * Instruções extras anexadas ao fim do prompt (ex.- "todos os itens devem começar com 'Eu sou alguém que...'").
    * @nullable
    */
   promptNotes?: string | null;
-  /** Constraints/attributes each item must satisfy */
-  itemAttributes?: string[];
-  /** Few-shot example items */
-  itemExamples?: string[];
-  embeddingModel: string;
-  /**
-   * @minimum 0
-   * @maximum 1
-   */
-  egaThreshold?: number;
 }

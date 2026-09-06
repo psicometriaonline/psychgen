@@ -125,6 +125,28 @@ run_with_error_capture(function() {
   }
   item_examples <- normalize_examples(p$itemExamples, item_attributes)
 
+  # Depois do round-trip por JSON, "ausente" chega ora como NULL, ora como
+  # list() vazia. O AIGENIE valida os argumentos e rejeita list() onde espera
+  # NULL, então normalizamos aqui.
+  nil_if_empty <- function(x) if (is.null(x) || length(x) == 0L) NULL else x
+
+  type_definitions <- nil_if_empty(p$itemTypeDefinitions)
+  if (!is.null(type_definitions)) {
+    type_definitions <- lapply(type_definitions, function(d) as.character(d)[1])
+    faltando <- setdiff(names(type_definitions), names(item_attributes))
+    if (length(faltando) > 0L) {
+      stop("itemTypeDefinitions tem tipos que não existem em itemAttributes: ",
+           paste(faltando, collapse = ", "), ".")
+    }
+    # O AIGENIE exige que os nomes batam exatamente com os de item.attributes.
+    type_definitions <- type_definitions[names(item_attributes)]
+    names(type_definitions) <- names(item_attributes)
+    type_definitions[vapply(type_definitions, is.null, logical(1))] <- ""
+  }
+
+  response_options <- nil_if_empty(p$responseOptions)
+  if (!is.null(response_options)) response_options <- as_chr(response_options)
+
   # target.N por tipo. O artigo recomenda >= 60 itens por tipo para que a
   # redução tenha o que reduzir; abaixo disso o bootEGA fica instável.
   target_n <- as.integer(p$targetN %||% 60L)
@@ -220,8 +242,8 @@ run_with_error_capture(function() {
       scale.title           = p$scaleTitle %||% construct,
       item.examples         = item_examples,
       audience              = p$audience,
-      item.type.definitions = p$itemTypeDefinitions,
-      response.options      = if (!is.null(p$responseOptions)) as_chr(p$responseOptions),
+      item.type.definitions = type_definitions,
+      response.options      = response_options,
       prompt.notes          = p$promptNotes,
       system.role           = p$systemRole,
       EGA.model             = ega_model,

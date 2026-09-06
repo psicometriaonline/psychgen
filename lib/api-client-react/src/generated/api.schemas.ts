@@ -166,17 +166,6 @@ export interface CreateProjectInput {
   publisher?: string | null;
 }
 
-export type UpdateProjectInputStatus =
-  (typeof UpdateProjectInputStatus)[keyof typeof UpdateProjectInputStatus];
-
-export const UpdateProjectInputStatus = {
-  draft: "draft",
-  generating: "generating",
-  calibrating: "calibrating",
-  ready: "ready",
-  archived: "archived",
-} as const;
-
 export interface UpdateProjectInput {
   /** @minLength 1 */
   name?: string;
@@ -188,13 +177,81 @@ export interface UpdateProjectInput {
   targetAudience?: string;
   /** @nullable */
   publisher?: string | null;
-  status?: UpdateProjectInputStatus;
 }
 
 /**
- * Full AIGENIE parameter surface — every knob exposed to the user
+ * Um tipo de item (dimensão) do instrumento e os atributos que ele deve cobrir. O AI-GENIE gera itens por ATRIBUTO, não por construto solto: é a atribuição por atributo que serve de gabarito para o NMI, que é calculado nesse nível mais fino.
+ */
+export interface ItemTypeSpec {
+  /**
+   * Nome da dimensão (ex.- "neuroticismo").
+   * @minLength 1
+   */
+  type: string;
+  /**
+   * Pelo menos 2 atributos únicos (ex.- ansioso, inseguro, irritável). O pacote rejeita tipos com menos de 2.
+   * @minItems 2
+   */
+  attributes: string[];
+  /**
+   * Definição do construto passada ao LLM (item.type.definitions). Importante para construtos emergentes ou ambíguos.
+   * @nullable
+   */
+  definition?: string | null;
+}
+
+/**
+ * Item-exemplo usado como âncora de estilo (item.examples). É por aqui que entram os itens de uma forma existente quando o objetivo é gerar uma forma paralela.
+ */
+export interface ItemExample {
+  /** @minLength 1 */
+  statement: string;
+  /** @minLength 1 */
+  attribute: string;
+  /** @minLength 1 */
+  type: string;
+}
+
+/**
+ * generate = AIGENIE() gera itens novos e reduz o pool. validate = GENIE() apenas valida e reduz os itens que já existem no projeto, sem gerar nada (revalidação de instrumento).
+ */
+export type AigenieParamsMode =
+  (typeof AigenieParamsMode)[keyof typeof AigenieParamsMode];
+
+export const AigenieParamsMode = {
+  generate: "generate",
+  validate: "validate",
+} as const;
+
+/**
+ * Método de construção da rede. O artigo reporta TMFG levemente melhor que EBICglasso para dados de texto.
+ */
+export type AigenieParamsEgaModel =
+  (typeof AigenieParamsEgaModel)[keyof typeof AigenieParamsEgaModel];
+
+export const AigenieParamsEgaModel = {
+  TMFG: "TMFG",
+  glasso: "glasso",
+} as const;
+
+/**
+ * Algoritmo de detecção de comunidades. O artigo usa Walktrap.
+ */
+export type AigenieParamsEgaAlgorithm =
+  (typeof AigenieParamsEgaAlgorithm)[keyof typeof AigenieParamsEgaAlgorithm];
+
+export const AigenieParamsEgaAlgorithm = {
+  walktrap: "walktrap",
+  louvain: "louvain",
+  leiden: "leiden",
+} as const;
+
+/**
+ * Parâmetros do AI-GENIE (Russell-Lasalandra, Christensen & Golino, 2026, Behavior Research Methods 58:217). Mapeiam nos argumentos de AIGENIE::AIGENIE() e AIGENIE::GENIE().
  */
 export interface AigenieParams {
+  /** generate = AIGENIE() gera itens novos e reduz o pool. validate = GENIE() apenas valida e reduz os itens que já existem no projeto, sem gerar nada (revalidação de instrumento). */
+  mode: AigenieParamsMode;
   model: string;
   /**
    * @minimum 0
@@ -207,33 +264,52 @@ export interface AigenieParams {
    */
   topP: number;
   /**
-   * @minimum 5
-   * @maximum 200
+   * Itens gerados por tipo antes da redução. O artigo recomenda 60 ou mais; abaixo disso UVA e bootEGA têm pouco o que reduzir e a estabilidade fica ruidosa.
+   * @minimum 10
+   * @maximum 300
    */
   targetN: number;
+  /** Injeta os itens já gerados no prompt seguinte para evitar repetição. */
   adaptive: boolean;
+  /** Roda a redução com todos os tipos juntos, em vez de tipo a tipo. */
   allTogether: boolean;
+  /** Roda uma análise de ajuste no pool completo após a redução. */
   runOverall: boolean;
+  embeddingModel: string;
+  /** Método de construção da rede. O artigo reporta TMFG levemente melhor que EBICglasso para dados de texto. */
+  egaModel: AigenieParamsEgaModel;
+  /** Algoritmo de detecção de comunidades. O artigo usa Walktrap. */
+  egaAlgorithm: AigenieParamsEgaAlgorithm;
+  /** @minItems 1 */
+  itemTypes: ItemTypeSpec[];
+  itemExamples?: ItemExample[];
   /**
-   * Custom system role for the LLM
+   * Domínio de pesquisa (ex.- "psicologia da personalidade").
+   * @nullable
+   */
+  domain?: string | null;
+  /**
+   * Título da escala em construção.
+   * @nullable
+   */
+  scaleTitle?: string | null;
+  /**
+   * População-alvo, o mais específica possível (ex.- "adolescentes brasileiros de escola pública").
+   * @nullable
+   */
+  audience?: string | null;
+  /** Rótulos da escala de resposta (ex.- concordo / neutro / discordo). Dão contexto ao LLM; não aparecem no texto do item. */
+  responseOptions?: string[];
+  /**
+   * Papel de sistema customizado. Se ausente, é construído a partir de domain/audience.
    * @nullable
    */
   systemRole?: string | null;
   /**
-   * Extra notes appended to prompt
+   * Instruções extras anexadas ao fim do prompt (ex.- "todos os itens devem começar com 'Eu sou alguém que...'").
    * @nullable
    */
   promptNotes?: string | null;
-  /** Constraints/attributes each item must satisfy */
-  itemAttributes?: string[];
-  /** Few-shot example items */
-  itemExamples?: string[];
-  embeddingModel: string;
-  /**
-   * @minimum 0
-   * @maximum 1
-   */
-  egaThreshold?: number;
 }
 
 export interface AigenieRunInput {
