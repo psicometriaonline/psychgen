@@ -22,6 +22,8 @@ services:
       context: ./docker/r-engine
       dockerfile: Dockerfile
       args:
+        # Versão do R. Precisa ser >= 4.5 — ver o comentário no Dockerfile.
+        R_VERSION: ${R_VERSION:-4.5.3}
         # Snapshot do CRAN (Posit PPM). Trava a data para builds reprodutíveis.
         CRAN_SNAPSHOT: ${CRAN_SNAPSHOT:-2026-08-03}
         # SHA de commit do laralee/AIGENIE. Vazio = instala do r-universe
@@ -38,11 +40,11 @@ services:
       AI_INTEGRATIONS_OPENAI_BASE_URL: ${AI_INTEGRATIONS_OPENAI_BASE_URL:-}
       AI_INTEGRATIONS_ANTHROPIC_API_KEY: ${AI_INTEGRATIONS_ANTHROPIC_API_KEY:-}
       AI_INTEGRATIONS_ANTHROPIC_BASE_URL: ${AI_INTEGRATIONS_ANTHROPIC_BASE_URL:-}
-      R_LIBS_USER: /home/r/.R/library-4.4
+      R_LIBS_USER: /home/r/.R/library-4.5
       JOBS_LOG_DIR: /srv/jobs-logs
     volumes:
       # Persistent CRAN library — packages survive `docker compose down`.
-      - psychgen_r_lib:/home/r/.R/library-4.4
+      - psychgen_r_lib:/home/r/.R/library-4.5
       # udpipe model cache (Portuguese-Bosque, ~17 MB) survives restarts.
       - psychgen_r_cache:/home/r/.cache
       # Mount the R scripts read-only so editing them doesn't require rebuild.

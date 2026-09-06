@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Make sure the persisted user library is on .libPaths() at runtime.
-mkdir -p "${R_LIBS_USER:-/home/r/.R/library-4.4}"
+mkdir -p "${R_LIBS_USER:-/home/r/.R/library-4.5}"
 
 echo ">>> Starting PsychGen R engine on :8000"
 exec Rscript -e "

@@ -266,8 +266,16 @@ Faça o seguinte e me mande:
 Get-Content build.log -Tail 80
 ```
 
-Copie tudo que aparecer e cole aqui no chat. Com isso eu corrijo e você repete
-o passo 6.
+Copie tudo que aparecer e cole aqui no chat — ou, melhor ainda, **anexe o
+arquivo `build.log`**, que está na pasta do projeto. Com isso eu corrijo e você
+repete o passo 6. A segunda tentativa é bem mais rápida: reaproveita tudo que
+já foi baixado.
+
+> **Se o build falhar compilando um pacote do zero**, uma tentativa que
+> costuma resolver antes mesmo de me perguntar: abra o `.env` (`notepad .env`),
+> troque `R_VERSION=4.5.3` por `R_VERSION=4.6.1`, salve e rode o passo 6 de
+> novo. Quase sempre o problema é uma versão do R velha demais para os pacotes
+> daquele momento.
 
 ---
 

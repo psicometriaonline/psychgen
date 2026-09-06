@@ -9,7 +9,7 @@
 
 `%||%` <- function(a, b) if (is.null(a) || (length(a) == 1 && is.na(a)) || identical(a, "")) b else a
 
-user_lib <- Sys.getenv("R_LIBS_USER", unset = file.path(Sys.getenv("HOME"), ".R/library-4.4"))
+user_lib <- Sys.getenv("R_LIBS_USER", unset = file.path(Sys.getenv("HOME"), ".R/library-4.5"))
 if (!dir.exists(user_lib)) dir.create(user_lib, showWarnings = FALSE, recursive = TRUE)
 .libPaths(c(user_lib, .libPaths()))
 

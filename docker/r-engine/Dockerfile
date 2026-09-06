@@ -1,18 +1,25 @@
-FROM rocker/r-ver:4.4.3
+# Versão do R. Precisa ser >= 4.5: o snapshot do CRAN que usamos (necessário
+# para trazer o EGAnet >= 2.4.0 que o AIGENIE 2.1.0 exige) contém pacotes que
+# usam a API C do R 4.5. Com 4.4.3 o build morria compilando `Deriv`, em
+# `R_ClosureFormals' was not declared in this scope` — função que só existe a
+# partir do 4.5. Ao trocar esta versão, ajuste também R_LIBS_USER abaixo e os
+# dois pontos correspondentes no docker-compose.yml.
+ARG R_VERSION=4.5.3
+FROM rocker/r-ver:${R_VERSION}
 
-# R_USER_DATA_DIR fixa o caminho que tools::R_user_dir("AIGENIE","data")
-# resolve — é onde o AIGENIE procura (e onde pré-construímos) o venv Python.
-# Sem isso o caminho varia com o HOME do processo e o venv pré-construído
-# no build não seria encontrado em runtime.
-# Locale UTF-8 explícito. Sob LC_CTYPE=C o R trata texto acentuado como bytes
-# e comparações de string em português falham silenciosamente — nomes de
-# dimensão como "apreensão avaliativa" deixam de bater com eles mesmos.
-# Verificado em teste: o mesmo round-trip passa em UTF-8 e falha em C.
+# LANG/LC_ALL: locale UTF-8 explícito. Sob LC_CTYPE=C o R trata texto acentuado
+#   como bytes e comparações de string em português falham silenciosamente —
+#   nomes de dimensão como "apreensão avaliativa" deixam de bater com eles
+#   mesmos. Verificado: o mesmo round-trip passa em UTF-8 e falha em C.
+# R_USER_DATA_DIR: fixa o caminho que tools::R_user_dir("AIGENIE","data")
+#   resolve — é onde o AIGENIE procura (e onde pré-construímos) o venv Python.
+#   Sem isso o caminho varia com o HOME do processo e o venv do build não
+#   seria encontrado em runtime.
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     HOME=/home/r \
-    R_LIBS_USER=/home/r/.R/library-4.4 \
+    R_LIBS_USER=/home/r/.R/library-4.5 \
     R_USER_DATA_DIR=/home/r/.local/share/R \
     RETICULATE_PYTHON=/home/r/.local/share/R/AIGENIE/aigenie_python_env/bin/python
 
@@ -37,7 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # conteúdo+permissões do mountpoint para o volume novo). Sem isso o processo
 # R (usuário `r`) toma "Permission denied" ao escrever o NDJSON por job.
 RUN useradd -m -u 1000 -s /bin/bash r \
-    && mkdir -p /home/r/.R/library-4.4 /home/r/.cache \
+    && mkdir -p /home/r/.R/library-4.5 /home/r/.cache \
                 /home/r/.local/share/R /srv/r-scripts /srv/jobs-logs \
     && chown -R r:r /home/r /srv \
     && chmod 0775 /srv/jobs-logs

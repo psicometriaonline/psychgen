@@ -26,7 +26,7 @@
 SNAPSHOT <- Sys.getenv("CRAN_SNAPSHOT", unset = "2026-08-03")
 
 options(
-  # Distro do base image (rocker/r-ver:4.4.3 → Ubuntu Noble 24.04). Usar
+  # Distro do base image (rocker/r-ver → Ubuntu Noble 24.04). Usar
   # binários de outra distro instala mas quebra no load por ABI de libstdc++.
   repos = c(CRAN = sprintf(
     "https://packagemanager.posit.co/cran/__linux__/noble/%s", SNAPSHOT
@@ -37,6 +37,26 @@ options(
   pkg.sysreqs_db_update = TRUE
 )
 Sys.setenv(PKG_SYSREQS = "true")
+
+# ---------------------------------------------------------------------------
+# Guarda de versão do R.
+#
+# O snapshot precisa ser recente (para trazer EGAnet >= 2.4.0), e pacotes
+# recentes usam a API C do R 4.5. Com R 4.4.3 o build morria compilando
+# `Deriv`, em `R_ClosureFormals' was not declared in this scope` — 100 linhas
+# de erro de compilador C++ para dizer "o R é velho demais". Falhar aqui, em
+# uma linha, é bem mais barato de diagnosticar.
+# ---------------------------------------------------------------------------
+R_MINIMO <- "4.5.0"
+if (getRversion() < R_MINIMO) {
+  stop(sprintf(
+    paste0("R %s é antigo demais para o snapshot %s do CRAN (mínimo: %s).\n",
+           "  Pacotes desse snapshot usam a API C do R 4.5 e não compilam em versões\n",
+           "  anteriores. Ajuste o build arg R_VERSION no docker-compose.yml, ou\n",
+           "  recue CRAN_SNAPSHOT para uma data compatível com este R."),
+    getRversion(), SNAPSHOT, R_MINIMO
+  ))
+}
 
 cat(">>> R version:      ", R.version.string, "\n")
 cat(">>> CRAN snapshot:  ", SNAPSHOT, "\n")
