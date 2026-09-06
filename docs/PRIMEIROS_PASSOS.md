@@ -49,6 +49,10 @@ usar.
 
 ## Passo 2 — Instalar o Docker Desktop
 
+> **Já tem o Docker Desktop instalado?** Pule para "Dar mais memória ao
+> Docker", logo abaixo, e depois leia "Se você já usa o Docker para outro
+> projeto".
+
 1. Baixe em <https://www.docker.com/products/docker-desktop/> (botão
    "Download for Windows").
 2. Execute o instalador. Deixe marcada a opção **"Use WSL 2 instead of
@@ -69,6 +73,52 @@ O R usa bastante memória para compilar os pacotes.
 2. Vá em **Resources**.
 3. Em **Memory**, arraste para pelo menos **8 GB**.
 4. Clique em **Apply & restart**.
+
+### Se você já usa o Docker para outro projeto
+
+O Docker **não fica "ligado" a um repositório do GitHub**. Ele não sabe o que é
+Git. O que ele faz é ler o arquivo `docker-compose.yml` da **pasta em que você
+está no momento** e subir o que estiver descrito ali.
+
+Ou seja: não existe nada para "trocar". Basta entrar na pasta do `psychgen`
+(passo 4) e rodar os comandos lá. O outro projeto continua existindo, intacto,
+na pasta dele.
+
+O que o Docker Desktop mostra na lista são os **containers** de todos os
+projetos juntos, agrupados pelo nome da pasta de cada um. Ver o outro projeto
+ali é normal.
+
+**O único conflito real é de porta.** Duas coisas não podem usar a mesma porta
+do computador ao mesmo tempo. O PsychGen usa três:
+
+| Porta | Para quê |
+|---|---|
+| 5432 | Banco de dados PostgreSQL |
+| 8080 | Servidor da API |
+| 5173 | O site |
+
+A 5432 é a mais provável de estar ocupada, porque quase todo projeto com banco
+de dados usa essa. Para verificar, com o outro projeto ligado, rode:
+
+```powershell
+docker ps --format "table {{.Names}}\t{{.Ports}}"
+```
+
+Se aparecer `5432`, `8080` ou `5173` na coluna da direita, há conflito. Duas
+saídas:
+
+- **Mais simples:** desligue o outro projeto enquanto usar o PsychGen. Entre na
+  pasta dele e rode `docker compose down`.
+- **Se precisar dos dois ao mesmo tempo:** mude as portas do PsychGen. Abra o
+  arquivo `.env` (passo 5) e troque os números:
+
+  ```
+  POSTGRES_PORT=5433
+  API_PORT=8081
+  WEB_PORT=5174
+  ```
+
+  Nesse caso o endereço do site passa a ser <http://localhost:5174>.
 
 ---
 
@@ -96,6 +146,14 @@ fizer.
    ```powershell
    git clone https://github.com/psicometriaonline/psychgen.git
    ```
+
+   > **O repositório é privado**, então na primeira vez vai abrir uma janela do
+   > navegador pedindo para você entrar no GitHub. Entre com a sua conta e
+   > autorize. O Windows guarda essa autorização — não vai perguntar de novo.
+   >
+   > Se em vez da janela aparecer um pedido de usuário e senha no terminal,
+   > feche o PowerShell, abra de novo e repita. A senha da conta do GitHub
+   > **não** funciona ali; tem que ser pela janela do navegador.
 
    ```powershell
    cd psychgen
