@@ -1,0 +1,120 @@
+# ============================================================================
+# PsychGen BR — R package install (run at image build time).
+# Pinned CRAN snapshot (Posit PPM 2025-04-15) for reproducibility.
+# ============================================================================
+options(
+  # Match the base image OS (rocker/r-ver:4.4.3 → Ubuntu Noble 24.04).
+  # Using a mismatched distro (e.g. jammy) ships binaries that may install
+  # but fail to load due to libc/libstdc++ ABI mismatches.
+  repos = c(CRAN = "https://packagemanager.posit.co/cran/__linux__/noble/2025-04-15"),
+  # Ncpus = 1L: disable install.packages parallel installer. With Ncpus > 1
+  # the parallel workers install binaries to lib but the parent R session
+  # sometimes fails to register them in time for requireNamespace() right
+  # after the call returns (observed with plumber/igraph). Single-threaded
+  # install is slower (~5 extra minutes total) but deterministic.
+  Ncpus = 1L,
+  install.packages.check.source = "no"
+)
+
+cat(">>> R version: ", R.version.string, "\n")
+cat(">>> Library path: ", .libPaths()[1], "\n")
+
+cran_pkgs <- c(
+  # I/O + HTTP
+  "jsonlite", "httr2", "curl",
+  # API server
+  "plumber",
+  # Math / ML
+  "Matrix", "glmnet", "randomForest",
+  # Psychometrics
+  "psych", "lavaan", "mirt",
+  # Networks / EGA (bootEGA ships with EGAnet)
+  "igraph", "qgraph", "EGAnet",
+  # SEM plotting
+  "semPlot",
+  # NLP (PT-BR)
+  "udpipe", "quanteda",
+  # Excel export
+  "openxlsx",
+  # Plotting (semPlot transitive)
+  "ggplot2",
+  # remotes (used for AIGENIE install below)
+  "remotes"
+)
+
+for (p in cran_pkgs) {
+  if (requireNamespace(p, quietly = TRUE)) {
+    cat("  [skip] ", p, " already installed\n", sep = "")
+    next
+  }
+  cat(">>> Installing ", p, "\n", sep = "")
+  # dependencies = NA installs only Depends/Imports/LinkingTo (default).
+  # dependencies = TRUE additionally pulls Suggests, which for plumber alone
+  # cascades into arrow/readr/vroom/ragg etc. (~30 unneeded packages, some of
+  # which fail to load on the noble base) and explodes build time.
+  install.packages(p, dependencies = NA)
+  if (!requireNamespace(p, quietly = TRUE)) {
+    cat("!!! requireNamespace(", p, ") returned FALSE. Diagnostics:\n", sep = "")
+    cat("    .libPaths(): ", paste(.libPaths(), collapse = " | "), "\n")
+    cat("    Installed in lib? ",
+        p %in% rownames(installed.packages()), "\n")
+    err <- tryCatch(
+      { loadNamespace(p); "OK (loaded on retry)" },
+      error = function(e) conditionMessage(e)
+    )
+    cat("    loadNamespace error: ", err, "\n", sep = "")
+    stop(sprintf("Failed to install %s", p))
+  }
+}
+
+# ----------------------------------------------------------------------------
+# AIGENIE — installed BY DEFAULT from a pinned git ref (commit SHA or tag).
+# Override the SHA in `.env` via INSTALL_AIGENIE_REF if you need a newer
+# upstream commit. Branch refs ("HEAD", "main", "master") are rejected to
+# guarantee build reproducibility. The install is best-effort: if the SHA
+# becomes unavailable upstream, stage1_aigenie.R falls back to
+# `igraph::cluster_louvain` so the pipeline still works.
+# ----------------------------------------------------------------------------
+DEFAULT_AIGENIE_REF <- "ff19571a6cd64e36f9ed3f6a4aa0aa5a4c9b0a2c"
+aigenie_ref <- Sys.getenv("INSTALL_AIGENIE_REF", unset = DEFAULT_AIGENIE_REF)
+
+if (aigenie_ref %in% c("HEAD", "main", "master")) {
+  stop(sprintf(
+    "INSTALL_AIGENIE_REF must be an immutable commit SHA or tag (got: %s).",
+    aigenie_ref
+  ))
+}
+
+if (!requireNamespace("AIGENIE", quietly = TRUE)) {
+  cat(">>> Installing AIGENIE from GitHub @ ", aigenie_ref, "\n", sep = "")
+  tryCatch(
+    remotes::install_github("hfgolino/AIGENIE",
+                            ref     = aigenie_ref,
+                            upgrade = "never"),
+    error = function(e) {
+      cat("WARN: AIGENIE install failed at ref=", aigenie_ref,
+          " (non-fatal — pipeline will use igraph::cluster_louvain fallback): ",
+          conditionMessage(e), "\n", sep = "")
+    }
+  )
+} else {
+  cat("  [skip] AIGENIE already installed\n")
+}
+
+# Pre-download the udpipe Portuguese-Bosque model into the cache volume.
+udpipe_dir <- file.path(Sys.getenv("HOME"), ".cache", "udpipe")
+dir.create(udpipe_dir, recursive = TRUE, showWarnings = FALSE)
+existing <- list.files(udpipe_dir, pattern = "portuguese.*\\.udpipe$", full.names = TRUE)
+if (length(existing) == 0L) {
+  cat(">>> Downloading udpipe Portuguese-Bosque model\n")
+  tryCatch(
+    udpipe::udpipe_download_model(language = "portuguese-bosque",
+                                  model_dir = udpipe_dir),
+    error = function(e) {
+      cat("WARN: udpipe model download failed (will retry on first use): ",
+          conditionMessage(e), "\n")
+    }
+  )
+}
+
+cat(">>> R package install complete.\n")
