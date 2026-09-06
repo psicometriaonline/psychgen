@@ -47,3 +47,18 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# ---------------------------------------------------------------------------
+# Segredos — NUNCA versionar.
+#
+# O .env carrega OPENAI_API_KEY, ANTHROPIC_API_KEY e a senha do Postgres.
+# Só o .env.example, com os campos vazios, é versionado.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# Logs de build/execução: podem conter caminhos locais, variáveis de ambiente
+# e trechos de configuração.
+*.log
+build.log

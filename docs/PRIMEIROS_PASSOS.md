@@ -197,9 +197,21 @@ Pronto: o projeto está em `Documentos\psychgen`.
 
 5. Salve (**Ctrl+S**) e feche o Bloco de Notas.
 
-> **Segurança:** o arquivo `.env` nunca vai para o GitHub — o `.gitignore` o
-> bloqueia. Sua chave fica só no seu computador. Nunca cole essa chave num
-> chat, nem comigo: se precisar, me diga apenas "a chave está configurada".
+> **Segurança:** o `.env` está listado no `.gitignore`, então o Git o ignora
+> por completo — ele não aparece em `git status`, não entra em `git add .`, e
+> não vai para o GitHub. Sua chave fica só no seu computador.
+>
+> Nunca cole essa chave num chat, nem comigo: se precisar, diga apenas "a
+> chave está configurada".
+>
+> Para conferir você mesmo, a qualquer momento:
+>
+> ```powershell
+> git status
+> ```
+>
+> Se `.env` **não** aparecer na lista, está protegido. E se um dia aparecer,
+> **não faça `git add`** — me avise primeiro.
 
 ---
 
