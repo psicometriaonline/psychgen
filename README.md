@@ -19,6 +19,11 @@ exato que será executado.
 
 ---
 
+> **Nunca usou Docker nem terminal?** Comece por
+> **[docs/PRIMEIROS_PASSOS.md](docs/PRIMEIROS_PASSOS.md)** — guia passo a passo
+> para Windows, do zero, sem pressupor conhecimento de programação. O texto
+> abaixo é a versão resumida, para quem já tem o ambiente montado.
+
 ## Rodando localmente (Windows / macOS / Linux)
 
 ### Pré-requisitos
