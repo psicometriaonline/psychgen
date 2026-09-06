@@ -287,7 +287,11 @@ Com a construção concluída:
 docker compose up -d
 ```
 
-Espere cerca de 1 minuto. Depois confira se as quatro partes estão de pé:
+> No passo 6 você construiu **apenas a peça do R**, que é a demorada. Agora o
+> Docker constrói as outras duas (o servidor e o site) automaticamente — mais
+> uns 3 a 5 minutos, só na primeira vez.
+
+Espere cerca de 1 minuto após o fim da construção. Depois confira se as quatro partes estão de pé:
 
 ```powershell
 docker compose ps
@@ -295,6 +299,10 @@ docker compose ps
 
 Você deve ver quatro linhas — `psychgen_postgres`, `psychgen_r_engine`,
 `psychgen_api`, `psychgen_web` — todas com **running** ou **healthy**.
+
+Se alguma aparecer como `starting`, espere um minuto e rode o comando de novo:
+o R leva um tempo para responder na primeira vez, e o servidor só sobe depois
+que ele responder.
 
 ---
 
