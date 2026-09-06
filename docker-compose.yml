@@ -22,10 +22,14 @@ services:
       context: ./docker/r-engine
       dockerfile: Dockerfile
       args:
-        # Opt-in: leave empty to skip AIGENIE install. To enable, set this to
-        # an immutable git ref (commit SHA or tag) — never use "HEAD"/"main"
-        # in production builds.
-        INSTALL_AIGENIE_REF: ${INSTALL_AIGENIE_REF:-}
+        # Snapshot do CRAN (Posit PPM). Trava a data para builds reprodutíveis.
+        CRAN_SNAPSHOT: ${CRAN_SNAPSHOT:-2026-08-03}
+        # SHA de commit do laralee/AIGENIE. Vazio = instala do r-universe
+        # (caminho recomendado pelo README oficial). Para travar uma versão
+        # exata, ponha um SHA imutável — nunca "HEAD"/"main".
+        # O AIGENIE deixou de ser opt-in: sem ele o build falha, em vez de
+        # subir uma imagem que silenciosamente não roda AI-GENIE.
+        AIGENIE_GIT_REF: ${AIGENIE_GIT_REF:-}
     container_name: psychgen_r_engine
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
