@@ -217,7 +217,27 @@ async function runJob(
           uvaSweeps: number | null;
           bootEgaRemoved: number | null;
           meanItemStability: number | null;
+          minItemStability: number | null;
+          itensAbaixoDoCorte: number | null;
         }[];
+        overall: {
+          initialNMI: number | null;
+          finalNMI: number | null;
+          egaModel: string | null;
+          startN: number | null;
+          finalN: number | null;
+        };
+        communityComposition:
+          | {
+              community: number;
+              nItems: number;
+              dominantAttribute: string;
+              attributePurity: number;
+              dominantType: string;
+              typePurity: number;
+              nAttributes: number;
+            }[]
+          | null;
       }>(
         scriptR,
         {
@@ -278,6 +298,8 @@ async function runJob(
         metricsJson: {
           aigenie: r.result.aigenie,
           perType: r.result.perType,
+          overall: r.result.overall,
+          communityComposition: r.result.communityComposition,
           ega: r.result.egaSummary,
           model: r.result.model,
           params,
@@ -290,6 +312,7 @@ async function runJob(
         egaSummary: r.result.egaSummary,
         aigenie: r.result.aigenie,
         perType: r.result.perType,
+        overall: r.result.overall,
       });
       await setProjectStatus(projectId, "draft");
     } else if (stage === "difficulty") {

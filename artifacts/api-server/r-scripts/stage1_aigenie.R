@@ -346,6 +346,50 @@ run_with_error_capture(function() {
   })
   names(per_type) <- NULL
 
+  # --------------------------------------------------------------------------
+  # Análise do pool completo (run.overall = TRUE)
+  #
+  # Com essa opção o pacote roda UM EGA sobre todos os itens juntos, com uma
+  # numeração de comunidades só. É o único lugar onde dá para perguntar se as
+  # comunidades encontradas correspondem ao gabarito de atributos.
+  #
+  # O NMI geral estava sendo ignorado por este script, e sem ele a contagem de
+  # comunidades não significa nada: 7 comunidades podem ser os 7 atributos ou
+  # 7 agrupamentos sem relação com eles. O número sozinho não distingue.
+  # --------------------------------------------------------------------------
+  overall_metrics <- list(
+    initialNMI = num(res$overall$initial_NMI),
+    finalNMI   = num(res$overall$final_NMI),
+    egaModel   = if (!is.null(res$overall$EGA.model_selected))
+                   as.character(res$overall$EGA.model_selected) else NULL,
+    startN     = int(res$overall$start_N),
+    finalN     = int(res$overall$final_N)
+  )
+
+  # Tabulação comunidade × atributo: para cada comunidade do EGA geral, qual
+  # atributo predomina e com que pureza. É a evidência direta de que a
+  # estrutura recuperada bate (ou não) com o gabarito declarado.
+  composicao_comunidades <- NULL
+  if (!is.null(final_items$EGA_com) && !is.null(final_items$attribute)) {
+    coms <- sort(unique(stats::na.omit(final_items$EGA_com)))
+    composicao_comunidades <- lapply(coms, function(cm) {
+      linhas <- final_items[!is.na(final_items$EGA_com) & final_items$EGA_com == cm, ]
+      tab_attr <- sort(table(linhas$attribute), decreasing = TRUE)
+      tab_tipo <- sort(table(linhas$type), decreasing = TRUE)
+      list(
+        community         = as.integer(cm),
+        nItems            = nrow(linhas),
+        dominantAttribute = names(tab_attr)[1],
+        # Pureza: fração dos itens da comunidade que vêm do atributo dominante.
+        # Perto de 1 = a comunidade É aquele atributo. Perto de 1/k = mistura.
+        attributePurity   = as.numeric(tab_attr[1]) / nrow(linhas),
+        dominantType      = names(tab_tipo)[1],
+        typePurity        = as.numeric(tab_tipo[1]) / nrow(linhas),
+        nAttributes       = length(tab_attr)
+      )
+    })
+  }
+
   start_total <- sum(vapply(per_type, function(x) x$startN %||% 0L, numeric(1)))
   nmi_final   <- vapply(per_type, function(x) x$finalNMI   %||% NA_real_, numeric(1))
   nmi_initial <- vapply(per_type, function(x) x$initialNMI %||% NA_real_, numeric(1))
@@ -390,6 +434,8 @@ run_with_error_capture(function() {
       meanInitialNMI  = if (all(is.na(nmi_initial))) NULL else mean(nmi_initial, na.rm = TRUE),
       meanFinalNMI    = if (all(is.na(nmi_final)))   NULL else mean(nmi_final,   na.rm = TRUE)
     ),
-    perType = per_type
+    perType = per_type,
+    overall = overall_metrics,
+    communityComposition = composicao_comunidades
   )
 })
