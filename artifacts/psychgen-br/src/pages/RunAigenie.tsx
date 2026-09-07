@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,16 +35,60 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type FormValues = z.infer<typeof RunAigenieStageBody>;
 
+/** Remove espaços das pontas e descarta entradas vazias. Só na saída. */
+const limpar = (xs: string[] | undefined) =>
+  (xs ?? []).map((v) => v.trim()).filter((v) => v !== "");
+
 /**
- * Atributos e opções de resposta são editados como texto livre (um por linha /
- * separados por vírgula) e convertidos para string[] na borda. Um field array
- * aninhado por atributo dentro de cada tipo de item deixaria o formulário
- * pesado sem ganho real de usabilidade.
+ * Lista editada como texto livre — um item por linha, ou separados por vírgula.
+ *
+ * O texto digitado vive em estado local; o formulário recebe a lista já
+ * fatiada, mas SEM normalização. A versão anterior aparava espaços e descartava
+ * vazios a cada tecla e reescrevia o campo com o resultado — então a barra de
+ * espaço não funcionava: o espaço era inserido e removido no mesmo instante,
+ * e não dava para digitar "antes da prova".
+ *
+ * A normalização acontece uma vez, no envio (`limpar`), e nas contagens que
+ * alimentam os avisos. O estado local é inicializado uma vez: este formulário
+ * não faz reset externo desses campos.
  */
-const linesToArray = (s: string) =>
-  s.split("\n").map((v) => v.trim()).filter((v) => v !== "");
-const commaToArray = (s: string) =>
-  s.split(",").map((v) => v.trim()).filter((v) => v !== "");
+function ListaTexto({
+  value,
+  onChange,
+  multilinha = false,
+  placeholder,
+  className,
+}: {
+  value: string[] | undefined;
+  onChange: (v: string[]) => void;
+  multilinha?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  const separador = multilinha ? "\n" : ", ";
+  const [texto, setTexto] = useState(() => (value ?? []).join(separador));
+
+  const aoDigitar = (t: string) => {
+    setTexto(t);
+    onChange(t.split(multilinha ? "\n" : ","));
+  };
+
+  return multilinha ? (
+    <Textarea
+      className={className}
+      placeholder={placeholder}
+      value={texto}
+      onChange={(e) => aoDigitar(e.target.value)}
+    />
+  ) : (
+    <Input
+      className={className}
+      placeholder={placeholder}
+      value={texto}
+      onChange={(e) => aoDigitar(e.target.value)}
+    />
+  );
+}
 
 export default function RunAigenie() {
   const routeParams = useParams();
@@ -100,34 +145,40 @@ export default function RunAigenie() {
   // Avisos que refletem o método, não o formulário: o artigo recomenda >= 60
   // itens por tipo, e o pacote rejeita tipos com menos de 2 atributos únicos.
   const tiposComPoucosAtributos = (itemTypes ?? [])
-    .filter((t) => new Set(t.attributes ?? []).size < 2)
-    .map((t) => t.type || "(sem nome)");
+    .filter((t) => new Set(limpar(t.attributes)).size < 2)
+    .map((t) => t.type.trim() || "(sem nome)");
+
+  // Uma normalização só, usada pelo envio e pelo painel de sintaxe R. Se cada
+  // um limpasse à sua maneira, o script previsto divergiria do executado.
+  function normalizar(p: FormValues["params"]): FormValues["params"] {
+    return {
+      ...p,
+      itemTypes: (p.itemTypes ?? [])
+        .filter((t) => t.type.trim() !== "")
+        .map((t) => ({
+          type: t.type.trim(),
+          attributes: limpar(t.attributes),
+          definition: t.definition?.trim() ? t.definition.trim() : undefined,
+        })),
+      responseOptions: limpar(p.responseOptions),
+      itemExamples: (p.itemExamples ?? [])
+        .map((e) => ({
+          statement: e.statement.trim(),
+          attribute: e.attribute.trim(),
+          type: e.type.trim(),
+        }))
+        .filter((e) => e.statement !== "" && e.attribute !== "" && e.type !== ""),
+      domain: p.domain?.trim() || undefined,
+      scaleTitle: p.scaleTitle?.trim() || undefined,
+      audience: p.audience?.trim() || undefined,
+      systemRole: p.systemRole?.trim() || undefined,
+      promptNotes: p.promptNotes?.trim() || undefined,
+    };
+  }
 
   function onSubmit(values: FormValues) {
-    const p = values.params;
-    const payload: FormValues = {
-      params: {
-        ...p,
-        itemTypes: (p.itemTypes ?? [])
-          .filter((t) => t.type.trim() !== "")
-          .map((t) => ({
-            type: t.type.trim(),
-            attributes: (t.attributes ?? []).filter((a) => a.trim() !== ""),
-            definition: t.definition?.trim() ? t.definition.trim() : undefined,
-          })),
-        itemExamples: (p.itemExamples ?? []).filter(
-          (e) => e.statement.trim() !== "" && e.attribute.trim() !== "" && e.type.trim() !== "",
-        ),
-        domain: p.domain?.trim() || undefined,
-        scaleTitle: p.scaleTitle?.trim() || undefined,
-        audience: p.audience?.trim() || undefined,
-        systemRole: p.systemRole?.trim() || undefined,
-        promptNotes: p.promptNotes?.trim() || undefined,
-      },
-    };
-
     runStage.mutate(
-      { id, data: payload },
+      { id, data: { params: normalizar(values.params) } },
       {
         onSuccess: (job) => {
           toast({
@@ -289,10 +340,10 @@ export default function RunAigenie() {
                         <FormItem>
                           <FormLabel>Opções de resposta</FormLabel>
                           <FormControl>
-                            <Input
+                            <ListaTexto
                               placeholder="discordo totalmente, discordo, neutro, concordo, concordo totalmente"
-                              value={(field.value ?? []).join(", ")}
-                              onChange={(e) => field.onChange(commaToArray(e.target.value))}
+                              value={field.value}
+                              onChange={field.onChange}
                             />
                           </FormControl>
                           <FormDescription>
@@ -359,11 +410,12 @@ export default function RunAigenie() {
                             <FormItem>
                               <FormLabel>Atributos (um por linha, mínimo 2)</FormLabel>
                               <FormControl>
-                                <Textarea
+                                <ListaTexto
+                                  multilinha
                                   className="min-h-[90px] font-mono text-sm"
                                   placeholder={"ansioso\ninseguro\nirritável\nabatido"}
-                                  value={(field.value ?? []).join("\n")}
-                                  onChange={(e) => field.onChange(linesToArray(e.target.value))}
+                                  value={field.value}
+                                  onChange={field.onChange}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -809,7 +861,7 @@ export default function RunAigenie() {
           <RScriptPreview
             projectId={id}
             stage="aigenie"
-            params={form.watch("params")}
+            params={normalizar(form.watch("params"))}
             filenamePrefix="aigenie"
           />
           <Card className="sticky top-6">
