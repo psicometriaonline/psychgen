@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, FileText, Calendar, BarChart2 } from "lucide-react";
 import { formatDate } from "@/lib/formatters";
 import { WrightMap } from "@/components/wright-map";
+import { AigenieReport, type AigenieMetrics } from "@/components/aigenie-report";
 
 export default function ReportDetail() {
   const params = useParams();
@@ -74,6 +75,10 @@ export default function ReportDetail() {
 
         {report.kind === 'irt' && (report.metricsJson as { wrightMap?: { items?: { itemId: number; difficulty: number }[]; thetaHistogram?: { bin: number; count: number }[] } } | null)?.wrightMap ? (
           <WrightMap data={(report.metricsJson as { wrightMap: { items?: { itemId: number; difficulty: number }[]; thetaHistogram?: { bin: number; count: number }[] } }).wrightMap} />
+        ) : null}
+
+        {report.kind === 'aigenie' && report.metricsJson ? (
+          <AigenieReport metrics={report.metricsJson as AigenieMetrics} />
         ) : null}
 
         <Card>

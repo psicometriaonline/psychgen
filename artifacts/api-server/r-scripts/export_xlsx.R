@@ -33,6 +33,12 @@ run_with_error_capture(function() {
         Texto                = it$text,
         Status               = it$status,
         GeradoPor            = it$generatedBy,
+        # Dimensao/Atributo sao o gabarito declarado; Comunidade_EGA e o
+        # agrupamento encontrado. E a comparacao entre as duas ultimas colunas
+        # que o NMI resume num numero, entao a planilha entregue a editora
+        # precisa das tres.
+        Dimensao             = it$dimension %||% NA_character_,
+        Atributo             = it$attribute %||% NA_character_,
         Comunidade_EGA       = it$egaCommunity %||% NA_integer_,
         Dificuldade_Estimada = it$difficultyEstimated %||% NA_real_,
         Dificuldade_Predita  = it$difficultyPredicted %||% NA_real_,

@@ -932,6 +932,11 @@ components:
           type: ["string", "null"]
         dimension:
           type: ["string", "null"]
+        # Faceta declarada que gerou o item. É o gabarito contra o qual o NMI do
+        # AI-GENIE é calculado, então precisa chegar ao frontend para que a
+        # composição das comunidades possa ser lida item a item.
+        attribute:
+          type: ["string", "null"]
         status:
           type: string
           enum: [generated, needs_review, approved, rejected]

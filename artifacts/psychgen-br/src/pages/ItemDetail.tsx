@@ -269,9 +269,15 @@ export default function ItemDetail() {
                     <Badge variant="secondary" className="px-3 py-1 text-sm bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">
                       Comunidade {item.egaCommunity}
                     </Badge>
+                    {item.attribute ? (
+                      <>
+                        <span className="text-sm text-muted-foreground">gerado a partir de</span>
+                        <Badge variant="outline" className="px-3 py-1 text-sm">{item.attribute}</Badge>
+                      </>
+                    ) : null}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Comunidades EGA indicam agrupamentos empíricos de itens baseados em similaridade semântica profunda, servindo como proxy para dimensionalidade teórica.
+                    A comunidade é o agrupamento que o EGA <em>encontrou</em> nos embeddings; o atributo é a faceta que foi <em>declarada</em> no formulário. O NMI do AI-GENIE compara exatamente essas duas informações — ver todos os itens lado a lado na aba <strong>Estrutura (EGA)</strong> do projeto.
                   </p>
                 </div>
               ) : (

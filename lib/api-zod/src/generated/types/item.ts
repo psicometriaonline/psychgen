@@ -15,6 +15,8 @@ export interface Item {
   construct?: string | null;
   /** @nullable */
   dimension?: string | null;
+  /** @nullable */
+  attribute?: string | null;
   status: ItemStatus;
   /** Model that generated the item */
   generatedBy: string;

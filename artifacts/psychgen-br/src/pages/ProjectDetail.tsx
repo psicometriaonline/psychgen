@@ -20,6 +20,7 @@ import { formatDate, formatPercent } from "@/lib/formatters";
 import { ArrowLeft, Settings, Trash2, Edit, Activity, Database, Play, CheckCircle2, XCircle, AlertCircle, FileText, ChevronRight, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { EgaStructure } from "@/components/ega-structure";
 
 export default function ProjectDetail() {
   const params = useParams();
@@ -147,6 +148,7 @@ export default function ProjectDetail() {
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
           <TabsTrigger value="items">Itens ({items?.length || 0})</TabsTrigger>
+          <TabsTrigger value="structure">Estrutura (EGA)</TabsTrigger>
           <TabsTrigger value="reports">Relatórios ({reports?.length || 0})</TabsTrigger>
         </TabsList>
 
@@ -310,6 +312,8 @@ export default function ProjectDetail() {
                     <TableHead>Texto</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Dimensão</TableHead>
+                    <TableHead>Atributo</TableHead>
+                    <TableHead>Comunidade</TableHead>
                     <TableHead>Dif. (Pred)</TableHead>
                     <TableHead>Dif. (Est)</TableHead>
                     <TableHead>Discriminação</TableHead>
@@ -323,6 +327,8 @@ export default function ProjectDetail() {
                         <TableCell><Skeleton className="h-4 w-64" /></TableCell>
                         <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-10" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-12" /></TableCell>
@@ -330,7 +336,7 @@ export default function ProjectDetail() {
                     ))
                   ) : filteredItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                         Nenhum item encontrado.
                       </TableCell>
                     </TableRow>
@@ -341,6 +347,12 @@ export default function ProjectDetail() {
                         <TableCell className="font-medium max-w-xs truncate" title={item.text}>{item.text}</TableCell>
                         <TableCell>{getItemStatusBadge(item.status)}</TableCell>
                         <TableCell className="text-sm">{item.dimension || '-'}</TableCell>
+                        <TableCell className="text-sm">{item.attribute || '-'}</TableCell>
+                        <TableCell className="text-sm">
+                          {item.egaCommunity != null
+                            ? <Badge variant="outline">{item.egaCommunity}</Badge>
+                            : <span className="text-muted-foreground">-</span>}
+                        </TableCell>
                         <TableCell className="text-sm">{item.difficultyPredicted?.toFixed(2) || '-'}</TableCell>
                         <TableCell className="text-sm">{item.difficultyEstimated?.toFixed(2) || '-'}</TableCell>
                         <TableCell className="text-sm">{item.discrimination?.toFixed(2) || '-'}</TableCell>
@@ -351,6 +363,17 @@ export default function ProjectDetail() {
               </Table>
             </div>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="structure" className="mt-6">
+          {isLoadingItems ? (
+            <div className="space-y-4">
+              <Skeleton className="h-40 w-full" />
+              <Skeleton className="h-40 w-full" />
+            </div>
+          ) : (
+            <EgaStructure items={items ?? []} projectId={id} />
+          )}
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">
