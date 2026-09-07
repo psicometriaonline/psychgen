@@ -254,6 +254,29 @@ if (is.null(py_err)) {
   if (!allow_missing) falhas <- c(falhas, "python venv")
 }
 
+# O venv precisa estar EXATAMENTE onde RETICULATE_PYTHON aponta.
+#
+# Esta checagem existe porque a versão anterior não a fazia, e o build passava
+# limpo com o venv no lugar errado: criação e verificação usavam o mesmo
+# `py_env_path` calculado, então concordavam entre si e nunca com a variável de
+# ambiente. O erro só apareceu em execução, como "Python specified in
+# RETICULATE_PYTHON does not exist" — R_user_dir() acrescenta "R" e o nome do
+# pacote ao R_USER_DATA_DIR, e o caminho ganhava um "R" a mais.
+reticulate_python <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+if (nzchar(reticulate_python)) {
+  if (identical(normalizePath(reticulate_python, mustWork = FALSE),
+                normalizePath(py_bin, mustWork = FALSE))) {
+    cat("    [ok]   RETICULATE_PYTHON aponta para o venv construído\n")
+  } else {
+    cat("    [FALHA] RETICULATE_PYTHON e o venv divergem:\n",
+        "            RETICULATE_PYTHON = ", reticulate_python, "\n",
+        "            venv construído   = ", py_bin, "\n", sep = "")
+    if (!allow_missing) falhas <- c(falhas, "RETICULATE_PYTHON")
+  }
+} else {
+  cat("    [aviso] RETICULATE_PYTHON não definido — o reticulate vai adivinhar o Python\n")
+}
+
 if (length(falhas) > 0L) {
   stop("Build abortado — componentes que não carregam: ",
        paste(falhas, collapse = ", "))

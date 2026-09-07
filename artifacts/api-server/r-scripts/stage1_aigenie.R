@@ -171,7 +171,18 @@ run_with_error_capture(function() {
   # falha aqui aparece como silêncio entre 2% e 10%, sem dizer se travou na
   # inicialização do Python ou em algum import.
   progress(0.02, "Preparando ambiente Python do AIGENIE")
-  log_info("Python configurado: ", Sys.getenv("RETICULATE_PYTHON", unset = "(RETICULATE_PYTHON não definido)"))
+  reticulate_python <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+  log_info("Python configurado: ", if (nzchar(reticulate_python)) reticulate_python else "(RETICULATE_PYTHON não definido)")
+
+  # Falha cedo e com instrução, em vez de deixar o reticulate reclamar lá
+  # dentro com "does not exist ... try restarting R". Reiniciar o R não
+  # resolve: se o venv não está no lugar, a imagem é que precisa ser refeita.
+  if (nzchar(reticulate_python) && !file.exists(reticulate_python)) {
+    stop("O ambiente Python do AIGENIE não está em ", reticulate_python, ".\n",
+         "  Ele é construído junto com a imagem do r-engine, então reconstrua-a:\n",
+         "    docker compose build r-engine\n",
+         "    docker compose up -d")
+  }
   t0 <- Sys.time()
   AIGENIE::ensure_aigenie_python()
   log_info(sprintf("Ambiente Python pronto em %.1f s", as.numeric(difftime(Sys.time(), t0, units = "secs"))))

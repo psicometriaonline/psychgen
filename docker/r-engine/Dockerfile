@@ -15,12 +15,15 @@ FROM rocker/r-ver:${R_VERSION}
 #   resolve — é onde o AIGENIE procura (e onde pré-construímos) o venv Python.
 #   Sem isso o caminho varia com o HOME do processo e o venv do build não
 #   seria encontrado em runtime.
+#   ATENÇÃO: R_user_dir() ACRESCENTA "R" e o nome do pacote ao que receber.
+#   Com ".../share/R" aqui, o caminho vira ".../share/R/R/AIGENIE" — dois "R" —
+#   e deixa de bater com RETICULATE_PYTHON abaixo. Termina em "share".
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     HOME=/home/r \
     R_LIBS_USER=/home/r/.R/library-4.5 \
-    R_USER_DATA_DIR=/home/r/.local/share/R \
+    R_USER_DATA_DIR=/home/r/.local/share \
     RETICULATE_PYTHON=/home/r/.local/share/R/AIGENIE/aigenie_python_env/bin/python
 
 # Apenas o mínimo para o pak funcionar e para criar o venv. As libs de
