@@ -19,6 +19,11 @@ exato que será executado.
 
 ---
 
+> **Como preencher o formulário do Estágio 1?** Veja
+> **[docs/GUIA_DE_PREENCHIMENTO.md](docs/GUIA_DE_PREENCHIMENTO.md)** — o que
+> escrever em cada campo e por quê, incluindo por que os atributos são o
+> gabarito contra o qual o NMI é calculado.
+>
 > **Nunca usou Docker nem terminal?** Comece por
 > **[docs/PRIMEIROS_PASSOS.md](docs/PRIMEIROS_PASSOS.md)** — guia passo a passo
 > para Windows, do zero, sem pressupor conhecimento de programação. O texto
