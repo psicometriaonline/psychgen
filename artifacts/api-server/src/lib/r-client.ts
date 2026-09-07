@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
+import { Agent, fetch as undiciFetch } from "undici";
 import type {
   RStreamEvent,
   RRunResult,
@@ -10,6 +11,23 @@ import { runRScript } from "./r-runner";
 import { logger } from "./logger";
 
 const R_ENGINE_URL = process.env["R_ENGINE_URL"];
+
+/**
+ * O undici — camada HTTP por baixo do `fetch` do Node — impõe `headersTimeout`
+ * e `bodyTimeout` de 300 s, e nenhum dos dois obedece ao AbortSignal. Como o
+ * r-engine só responde no FIM da execução, e uma rodada do AI-GENIE leva de 10
+ * a 30 minutos, toda execução morria aos 5 minutos exatos com um lacônico
+ * "fetch failed" — inclusive as que estavam indo bem.
+ *
+ * Zerar os dois desativa esses limites e devolve o controle ao AbortController
+ * abaixo, que é onde o prazo real está declarado (1 h por padrão).
+ *
+ * Limitação conhecida: segurar uma conexão HTTP aberta por meia hora é frágil.
+ * O desenho correto seria o plumber aceitar o job e responder na hora, com a
+ * API acompanhando pelo arquivo de log — que já existe para o streaming. Fica
+ * como próximo passo de robustez.
+ */
+const rEngineAgent = new Agent({ headersTimeout: 0, bodyTimeout: 0 });
 const JOBS_LOG_DIR = process.env["JOBS_LOG_DIR"] ?? "/srv/jobs-logs";
 
 const STAGE_TO_HTTP_PATH: Record<string, string> = {
@@ -181,11 +199,12 @@ async function httpCall<T>(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, {
+    const res = await undiciFetch(url, {
       method,
       headers: { "content-type": "application/json" },
       body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
       signal: controller.signal,
+      dispatcher: rEngineAgent,
     });
     clearTimeout(timer);
 
@@ -233,7 +252,17 @@ async function httpCall<T>(
     return { ok: true, result: parsed as T, events };
   } catch (err) {
     clearTimeout(timer);
-    const msg = err instanceof Error ? err.message : String(err);
+    // `fetch failed` sozinho não diz nada. A causa real (timeout, conexão
+    // recusada, socket fechado) vem em `cause`, que é o que interessa no log.
+    const base = err instanceof Error ? err.message : String(err);
+    const cause = err instanceof Error ? (err.cause as { code?: string; message?: string } | undefined) : undefined;
+    const detalhe = cause?.code ?? cause?.message;
+    const abortado = controller.signal.aborted;
+    const msg = abortado
+      ? `Tempo limite de ${Math.round(timeoutMs / 60000)} min excedido aguardando o r-engine`
+      : detalhe
+        ? `${base} (${detalhe})`
+        : base;
     pushEvent({
       type: "log",
       level: "error",

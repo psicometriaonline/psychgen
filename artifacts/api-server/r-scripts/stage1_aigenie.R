@@ -166,8 +166,16 @@ run_with_error_capture(function() {
   # Ambiente Python (o AIGENIE embeda via reticulate, não por HTTP em R).
   # Na imagem o venv já vem pronto, então isto só valida e aponta o reticulate.
   # --------------------------------------------------------------------------
+  # O venv já vem pronto na imagem, então isto só aponta o reticulate e importa
+  # os módulos. Os marcos abaixo existem porque a etapa é opaca: sem eles, uma
+  # falha aqui aparece como silêncio entre 2% e 10%, sem dizer se travou na
+  # inicialização do Python ou em algum import.
   progress(0.02, "Preparando ambiente Python do AIGENIE")
+  log_info("Python configurado: ", Sys.getenv("RETICULATE_PYTHON", unset = "(RETICULATE_PYTHON não definido)"))
+  t0 <- Sys.time()
   AIGENIE::ensure_aigenie_python()
+  log_info(sprintf("Ambiente Python pronto em %.1f s", as.numeric(difftime(Sys.time(), t0, units = "secs"))))
+  progress(0.05, "Ambiente Python pronto")
 
   # Encaminha as mensagens do AIGENIE para o stream de logs do job em vez de
   # deixá-las soltas no stdout, que é o canal do protocolo PSYCHGEN_*.
