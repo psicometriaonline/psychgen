@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useRunAigenieStage, useGetProject } from "@workspace/api-client-react";
+import {
+  useRunAigenieStage,
+  useGetProject,
+  useListPipelineJobs,
+  getListPipelineJobsQueryKey,
+} from "@workspace/api-client-react";
 import {
   RunAigenieStageBody,
   runAigenieStageBodyParamsModeDefault,
@@ -28,12 +33,109 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Play, Info, Plus, X, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Play, Info, Plus, X, TriangleAlert, RotateCcw, History } from "lucide-react";
 import { RScriptPreview } from "@/components/r-script-preview";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type FormValues = z.infer<typeof RunAigenieStageBody>;
+type Params = FormValues["params"];
+
+/**
+ * Persistência do formulário.
+ *
+ * Configurar uma rodada do AI-GENIE dá trabalho: dimensões, atributos,
+ * definições, itens-âncora. Perder tudo porque a execução falhou — e ela vai
+ * falhar algumas vezes enquanto o pipeline amadurece — torna cada tentativa
+ * cara demais para valer a pena.
+ *
+ * Duas camadas:
+ *   1. Rascunho no navegador, salvo a cada alteração e por projeto. Cobre
+ *      recarregar a página, fechar o navegador, voltar depois de um erro.
+ *   2. Se não houver rascunho, os parâmetros da última execução do projeto,
+ *      que já ficam gravados em `pipeline_jobs.paramsJson`. Cobre outro
+ *      navegador ou outra máquina.
+ *
+ * A chave é versionada: se o formato dos parâmetros mudar, rascunhos antigos
+ * são ignorados em vez de quebrar o formulário.
+ */
+const CHAVE_RASCUNHO = (projectId: number) => `psychgen:aigenie:v1:${projectId}`;
+
+function lerRascunho(projectId: number): Params | null {
+  try {
+    const cru = window.localStorage.getItem(CHAVE_RASCUNHO(projectId));
+    if (!cru) return null;
+    const obj = JSON.parse(cru) as unknown;
+    if (typeof obj !== "object" || obj === null) return null;
+    return obj as Params;
+  } catch {
+    // localStorage pode estar indisponível (janela anônima, política do
+    // navegador). Sem rascunho é degradação aceitável; quebrar a tela não é.
+    return null;
+  }
+}
+
+function salvarRascunho(projectId: number, params: Params) {
+  try {
+    window.localStorage.setItem(CHAVE_RASCUNHO(projectId), JSON.stringify(params));
+  } catch {
+    /* idem */
+  }
+}
+
+function apagarRascunho(projectId: number) {
+  try {
+    window.localStorage.removeItem(CHAVE_RASCUNHO(projectId));
+  } catch {
+    /* idem */
+  }
+}
+
+const PARAMS_PADRAO = (): Params => ({
+  mode: runAigenieStageBodyParamsModeDefault,
+  model: runAigenieStageBodyParamsModelDefault,
+  temperature: runAigenieStageBodyParamsTemperatureDefault,
+  topP: runAigenieStageBodyParamsTopPDefault,
+  targetN: runAigenieStageBodyParamsTargetNDefault,
+  adaptive: runAigenieStageBodyParamsAdaptiveDefault,
+  allTogether: runAigenieStageBodyParamsAllTogetherDefault,
+  runOverall: runAigenieStageBodyParamsRunOverallDefault,
+  embeddingModel: runAigenieStageBodyParamsEmbeddingModelDefault,
+  egaModel: runAigenieStageBodyParamsEgaModelDefault,
+  egaAlgorithm: runAigenieStageBodyParamsEgaAlgorithmDefault,
+  domain: "",
+  scaleTitle: "",
+  audience: "",
+  responseOptions: [],
+  systemRole: "",
+  promptNotes: "",
+  itemTypes: [{ type: "", attributes: [], definition: "" }],
+  itemExamples: [],
+});
+
+/**
+ * Completa o que vier de fora (rascunho ou execução anterior) com os padrões.
+ * Sem isso, um parâmetro adicionado depois que o rascunho foi salvo chegaria
+ * como `undefined` e derrubaria o campo correspondente.
+ */
+function comPadroes(parcial: Partial<Params> | null | undefined): Params {
+  const padrao = PARAMS_PADRAO();
+  if (!parcial) return padrao;
+  const juntos = { ...padrao, ...parcial } as Params;
+  // Campos de lista precisam ser array de verdade — um rascunho corrompido
+  // não pode virar `.map of undefined` na renderização.
+  if (!Array.isArray(juntos.itemTypes) || juntos.itemTypes.length === 0) {
+    juntos.itemTypes = padrao.itemTypes;
+  }
+  if (!Array.isArray(juntos.itemExamples)) juntos.itemExamples = [];
+  if (!Array.isArray(juntos.responseOptions)) juntos.responseOptions = [];
+  juntos.itemTypes = juntos.itemTypes.map((t) => ({
+    type: t?.type ?? "",
+    attributes: Array.isArray(t?.attributes) ? t.attributes : [],
+    definition: t?.definition ?? "",
+  }));
+  return juntos;
+}
 
 /** Remove espaços das pontas e descarta entradas vazias. Só na saída. */
 const limpar = (xs: string[] | undefined) =>
@@ -90,41 +192,92 @@ function ListaTexto({
   );
 }
 
+type Origem = "padrao" | "rascunho" | "execucao";
+
+/**
+ * A página resolve a configuração inicial ANTES de montar o formulário.
+ *
+ * Não dá para preencher depois com `form.reset()`: os campos de lista guardam
+ * o texto digitado em estado local, inicializado uma vez, e não veriam a
+ * atualização. Montar o formulário só com a semente pronta evita isso.
+ */
 export default function RunAigenie() {
   const routeParams = useParams();
   const id = Number(routeParams.id);
+  const { data: project, isLoading: carregandoProjeto } = useGetProject(id);
+
+  const rascunho = useMemo(() => (Number.isFinite(id) ? lerRascunho(id) : null), [id]);
+
+  // Só consulta as execuções anteriores quando não há rascunho local.
+  const filtroJobs = { projectId: id, stage: "aigenie" as never };
+  const { data: jobs, isLoading: carregandoJobs } = useListPipelineJobs(filtroJobs, {
+    query: {
+      queryKey: getListPipelineJobsQueryKey(filtroJobs),
+      enabled: Number.isFinite(id) && rascunho === null,
+    },
+  });
+
+  if (carregandoProjeto || (rascunho === null && carregandoJobs)) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-12 w-1/3" />
+        <Skeleton className="h-[600px] w-full" />
+      </div>
+    );
+  }
+
+  const ultimaExecucao = (jobs ?? [])
+    .map((j) => (j.paramsJson as { params?: Partial<Params> } | null)?.params)
+    .find((p) => p != null);
+
+  const origem: Origem = rascunho ? "rascunho" : ultimaExecucao ? "execucao" : "padrao";
+  const semente = comPadroes(rascunho ?? ultimaExecucao);
+
+  return (
+    <FormularioAigenie
+      key={id}
+      id={id}
+      nomeProjeto={project?.name}
+      semente={semente}
+      origem={origem}
+    />
+  );
+}
+
+function FormularioAigenie({
+  id,
+  nomeProjeto,
+  semente,
+  origem,
+}: {
+  id: number;
+  nomeProjeto: string | undefined;
+  semente: Params;
+  origem: Origem;
+}) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-
-  const { data: project, isLoading: isLoadingProject } = useGetProject(id);
   const runStage = useRunAigenieStage();
+  const [avisoOrigem, setAvisoOrigem] = useState(origem !== "padrao");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(RunAigenieStageBody) as never,
-    defaultValues: {
-      params: {
-        mode: runAigenieStageBodyParamsModeDefault,
-        model: runAigenieStageBodyParamsModelDefault,
-        temperature: runAigenieStageBodyParamsTemperatureDefault,
-        topP: runAigenieStageBodyParamsTopPDefault,
-        targetN: runAigenieStageBodyParamsTargetNDefault,
-        adaptive: runAigenieStageBodyParamsAdaptiveDefault,
-        allTogether: runAigenieStageBodyParamsAllTogetherDefault,
-        runOverall: runAigenieStageBodyParamsRunOverallDefault,
-        embeddingModel: runAigenieStageBodyParamsEmbeddingModelDefault,
-        egaModel: runAigenieStageBodyParamsEgaModelDefault,
-        egaAlgorithm: runAigenieStageBodyParamsEgaAlgorithmDefault,
-        domain: "",
-        scaleTitle: "",
-        audience: "",
-        responseOptions: [],
-        systemRole: "",
-        promptNotes: "",
-        itemTypes: [{ type: "", attributes: [], definition: "" }],
-        itemExamples: [],
-      },
-    },
+    defaultValues: { params: semente },
   });
+
+  // Salva o rascunho a cada alteração. É o que faz a configuração sobreviver
+  // a um erro, a um F5 ou ao navegador fechado.
+  useEffect(() => {
+    const sub = form.watch((valores) => {
+      if (valores?.params) salvarRascunho(id, valores.params as Params);
+    });
+    return () => sub.unsubscribe();
+  }, [form, id]);
+
+  function limparFormulario() {
+    apagarRascunho(id);
+    window.location.reload();
+  }
 
   const {
     fields: typeFields,
@@ -198,15 +351,6 @@ export default function RunAigenie() {
     );
   }
 
-  if (isLoadingProject) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-12 w-1/3" />
-        <Skeleton className="h-[600px] w-full" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center gap-4">
@@ -218,10 +362,32 @@ export default function RunAigenie() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Executar AI-GENIE</h1>
           <p className="text-muted-foreground">
-            Projeto: {project?.name} • Geração e validação estrutural
+            Projeto: {nomeProjeto} • Geração e validação estrutural
           </p>
         </div>
       </div>
+
+      {avisoOrigem && (
+        <Alert>
+          <History className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>
+              {origem === "rascunho"
+                ? "Recuperamos a configuração que você tinha preenchido neste projeto."
+                : "Preenchemos com os parâmetros da última execução deste projeto."}{" "}
+              Confira antes de rodar.
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setAvisoOrigem(false)}
+            >
+              Ok
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
@@ -833,7 +999,15 @@ export default function RunAigenie() {
                     </div>
                   )}
 
-                  <div className="flex justify-end gap-4 pt-6 border-t">
+                  <div className="flex justify-end items-center gap-4 pt-6 border-t">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="mr-auto gap-2 text-muted-foreground"
+                      onClick={limparFormulario}
+                    >
+                      <RotateCcw className="h-4 w-4" /> Limpar formulário
+                    </Button>
                     <Link href={`/projects/${id}`}>
                       <Button type="button" variant="ghost">
                         Cancelar
