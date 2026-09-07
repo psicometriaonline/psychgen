@@ -276,6 +276,14 @@ run_with_error_capture(function() {
     ))
   }
 
+  # O pacote fixa o corte de wTO da UVA em 0.25 dentro de
+  # reduce_redundancy_uva() e não o expõe como argumento. O artigo relata ter
+  # usado 0.20, por considerar 0.25 conservador demais para pegar itens quase
+  # idênticos. Ou seja: a UVA aqui remove MENOS do que a do artigo, e não há
+  # como ajustar sem modificar o pacote. Fica registrado em cada execução.
+  log_info("Nota: a UVA usa corte de wTO = 0.25 (padrão do pacote). ",
+           "O artigo do AI-GENIE usou 0.20 e removeria mais redundâncias.")
+
   progress(0.90, "Consolidando resultados do pipeline")
 
   # --------------------------------------------------------------------------
@@ -295,10 +303,30 @@ run_with_error_capture(function() {
   num <- function(x) if (is.null(x) || length(x) == 0L) NULL else as.numeric(x)[1]
   int <- function(x) if (is.null(x) || length(x) == 0L) NULL else as.integer(x)[1]
 
+  # Estabilidade por item, vinda do bootEGA.
+  #
+  # O caminho tem `item.stability` DUAS vezes — é assim no EGAnet, e o
+  # AIGENIE o acessa exatamente assim em reduce_by_stability(). A primeira
+  # tentativa aqui usava um nível só e devolvia lista vazia silenciosamente,
+  # o que apagava justamente a métrica central de qualidade do bootEGA.
+  # Mantemos o caminho de um nível como alternativa caso a estrutura mude.
+  extrair_estabilidade <- function(boot) {
+    caminhos <- list(
+      function() boot$stability$item.stability$item.stability$empirical.dimensions,
+      function() boot$stability$item.stability$empirical.dimensions
+    )
+    for (f in caminhos) {
+      v <- tryCatch(f(), error = function(e) NULL)
+      if (!is.null(v) && length(v) > 0L && is.numeric(unlist(v))) {
+        return(as.numeric(unlist(v)))
+      }
+    }
+    NULL
+  }
+
   per_type <- lapply(names(res$item_type_level), function(tp) {
     t <- res$item_type_level[[tp]]
-    stab <- tryCatch(t$bootEGA$final_boot$stability$item.stability$empirical.dimensions,
-                     error = function(e) NULL)
+    stab <- extrair_estabilidade(t$bootEGA$final_boot)
     list(
       type            = tp,
       startN          = int(t$start_N),
@@ -309,7 +337,11 @@ run_with_error_capture(function() {
       uvaRemoved      = int(t$UVA$n_removed),
       uvaSweeps       = int(t$UVA$n_sweeps),
       bootEgaRemoved  = int(t$bootEGA$n_removed),
-      meanItemStability = if (!is.null(stab)) mean(as.numeric(stab), na.rm = TRUE) else NULL
+      meanItemStability = if (!is.null(stab)) mean(stab, na.rm = TRUE) else NULL,
+      minItemStability  = if (!is.null(stab)) min(stab, na.rm = TRUE) else NULL,
+      # Após a redução do bootEGA nenhum item deveria ficar abaixo de 0.75.
+      # Se algum ficar, a redução parou antes de estabilizar.
+      itensAbaixoDoCorte = if (!is.null(stab)) sum(stab < 0.75, na.rm = TRUE) else NULL
     )
   })
   names(per_type) <- NULL
